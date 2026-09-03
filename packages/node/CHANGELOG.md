@@ -3,6 +3,11 @@
 All notable changes to this package are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-09-03
+
+First release published to npm. `1.0.0` and `1.0.1` were unpublished
+pre-release iterations; their notes are folded in below.
+
 ## [1.0.1] - 2026-09-03
 
 ### Changed

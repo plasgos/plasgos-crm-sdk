@@ -9,7 +9,7 @@ import {
   type SubscribeWebhookInput,
 } from "./types.js";
 
-const SDK_VERSION = "1.0.1";
+const SDK_VERSION = "1.0.2";
 
 class CredentialsResource extends Resource {
   /** Current API credential for the logged-in user (`data` is `null` if none). */
