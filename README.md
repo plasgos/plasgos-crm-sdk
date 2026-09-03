@@ -9,6 +9,13 @@ service). One contract, three languages.
 | PHP | `plasgos/crm-sdk` | Packagist | [`packages/php`](packages/php) |
 | Python | `plasgos-crm-sdk` | PyPI | [`packages/python`](packages/python) |
 
+## Documentation
+
+**[docs/sdk-guide/](docs/sdk-guide/README.md)** — full usage guide (Bahasa
+Indonesia), from authentication through every endpoint and webhooks, with
+side-by-side Node / PHP / Python examples. Written as plain Markdown, safe to
+import into Notion.
+
 ## What the SDKs cover
 
 - **Signed API** (`/api/v1/*`) — HMAC-signed requests for approved API keys:
@@ -49,6 +56,7 @@ Webhooks are **not** HMAC-signed; they carry your `verify_token` in
 
 ```
 openapi/openapi.yaml         API contract (OpenAPI 3.1)
+docs/sdk-guide/              full usage guide (10 pages, Notion-ready)
 docs/SDK_SPEC.md             shared SDK contract
 docs/vectors.json            golden signature vectors
 docs/RELEASING.md            per-registry publish steps
