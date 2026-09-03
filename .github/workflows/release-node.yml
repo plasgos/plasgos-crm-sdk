@@ -1,0 +1,47 @@
+name: release-node
+
+# Publishes packages/node to npm when a tag like `node-v1.2.3` is pushed.
+# Requirements:
+#   - repo secret NPM_TOKEN  (npm "Automation" access token), OR
+#   - npm Trusted Publishing configured for this repo+workflow (then drop NODE_AUTH_TOKEN)
+on:
+  push:
+    tags: ["node-v*"]
+
+permissions:
+  contents: read
+  id-token: write # for --provenance / trusted publishing
+
+defaults:
+  run:
+    working-directory: packages/node
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: packages/node/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#node-v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME -> $TAG_VERSION does not match package.json $PKG_VERSION" >&2
+            exit 1
+          fi
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

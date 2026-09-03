@@ -1,0 +1,896 @@
+openapi: 3.1.0
+info:
+  title: Plasgos CRM API — Api Integration
+  version: 1.0.0
+  description: |
+    Public API surface for the **Api Integration** feature of Plasgos CRM
+    (`api-crm` service).
+
+    There are two authentication domains:
+
+    1. **Signed API** (`/api/v1/*`) — used by external integrators with an
+       approved API key. Every request is signed with an HMAC-SHA256 signature.
+    2. **Credential management** (`/v2/integration/*`) — used by the dashboard /
+       first-party clients with a logged-in user access token to request,
+       inspect, regenerate credentials and register a webhook.
+
+    ## Signed API authentication
+
+    Send these headers on every `/api/v1/*` request:
+
+    | Header        | Value                                                            |
+    |---------------|-----------------------------------------------------------------|
+    | `x-api-key`   | The API key (64 hex chars).                                     |
+    | `x-timestamp` | Current Unix time in **seconds**.                              |
+    | `x-signature` | `HMAC_SHA256(secret_key, "{api_key}:{timestamp}")` lowercase hex |
+
+    Notes:
+
+    - The signed string is only `"{api_key}:{timestamp}"`. It does **not** cover
+      the HTTP method, path, query or body.
+    - The timestamp must be within `SIGNATURE_TTL` (default **300** seconds) of
+      server time, otherwise the request is rejected with `408`.
+    - `secret_key` is the plaintext secret (`plg_` + hex) returned when the key
+      is approved / regenerated, not any stored/encrypted form.
+
+    ## Credential management authentication
+
+    `/v2/integration/*` uses the standard CRM user session:
+
+    | Header          | Value                                        |
+    |-----------------|----------------------------------------------|
+    | `Authorization` | `Bearer <encrypted access token>`            |
+    | `fingerprint`   | The device fingerprint bound to the session. |
+
+    ## Response envelopes
+
+    The service is not fully consistent. Clients should normalise:
+
+    - Most `/api/v1/*` and all `/v2/integration/*` endpoints:
+      `{ "status": <int|bool>, "message": <string>, "data": <any>, "metadata"|"meta": <object> }`
+    - `GET /api/v1/references/variables`: `{ "success": true, "data": [...] }`
+    - Signature / auth failures: `{ "status": <int>, "message": <string>, "metadata": { "timestamp": <int> } }`
+    - Entitlement failures (`403` no-plan, `429` quota): `{ "success": false, "message": <string> }`
+    - Validation failures: `{ "status": <int>, "message": "Missing or invalid data", "errors": [ { "message", "path" } ] }`
+
+  contact:
+    name: Plasgos
+    url: https://plasgos.co.id
+  license:
+    name: MIT
+
+servers:
+  - url: https://wa-client.plasgos.co.id
+    description: Production
+  - url: https://api-crm.sandbox.plasgos.co.id
+    description: Sandbox
+
+tags:
+  - name: Messages
+    description: Unofficial WhatsApp messaging.
+  - name: Accounts
+    description: Connected unofficial WhatsApp accounts.
+  - name: References
+    description: Reference data (template variables, contacts).
+  - name: Official Accounts
+    description: WhatsApp Business API (WABA) official accounts & phone numbers.
+  - name: Official Templates
+    description: Approved WABA message templates.
+  - name: Official Messages
+    description: Send WABA template messages / OTP.
+  - name: Official Broadcasts
+    description: Create and monitor WABA broadcasts.
+  - name: Credentials
+    description: Request / inspect / regenerate API credentials, register webhook.
+  - name: Webhooks
+    description: Events pushed from Plasgos CRM to the integrator's endpoint.
+
+security:
+  - ApiKey: []
+    Timestamp: []
+    Signature: []
+
+paths:
+  /api/v1/messages:
+    post:
+      tags: [Messages]
+      operationId: sendMessage
+      summary: Send an unofficial WhatsApp message
+      x-permission: message:send
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+      responses:
+        '200':
+          description: Message accepted / sent.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '408': { $ref: '#/components/responses/SignatureExpired' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    get:
+      tags: [Messages]
+      operationId: listMessages
+      summary: List messages sent through the API
+      x-permission: message:list
+      responses:
+        '200':
+          description: Messages.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '408': { $ref: '#/components/responses/SignatureExpired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/v1/messages/{message_id}:
+    get:
+      tags: [Messages]
+      operationId: getMessage
+      summary: Get one message by its client-supplied id
+      x-permission: message:detail
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Message.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '408': { $ref: '#/components/responses/SignatureExpired' }
+
+  /api/v1/accounts:
+    get:
+      tags: [Accounts]
+      operationId: listAccounts
+      summary: List connected unofficial WhatsApp accounts
+      x-permission: account:list
+      responses:
+        '200':
+          description: Accounts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Account' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '408': { $ref: '#/components/responses/SignatureExpired' }
+
+  /api/v1/accounts/{account_id}:
+    get:
+      tags: [Accounts]
+      operationId: getAccount
+      summary: Get one connected account
+      x-permission: account:detail
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema: { type: string, description: Mongo ObjectId }
+      responses:
+        '200':
+          description: Account.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Account' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '408': { $ref: '#/components/responses/SignatureExpired' }
+
+  /api/v1/references/variables:
+    get:
+      tags: [References]
+      operationId: listTemplateVariables
+      summary: List available WABA template variables
+      description: Only requires a valid signature; no permission scope is checked.
+      responses:
+        '200':
+          description: Variables.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        label: { type: string }
+                        value: { type: string, example: '{{name}}' }
+                        example: { type: string }
+
+  /api/v1/references/contacts:
+    get:
+      tags: [References]
+      operationId: listContacts
+      summary: List CRM contacts
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Contacts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { type: object, additionalProperties: true } }
+                      metadata: { $ref: '#/components/schemas/PageMetadata' }
+
+  /api/v1/official/accounts:
+    get:
+      tags: [Official Accounts]
+      operationId: listOfficialAccounts
+      summary: List WABA official accounts (with active phone numbers)
+      x-permission: official:account:list
+      responses:
+        '200': { $ref: '#/components/responses/OfficialListEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/official/accounts/phone-numbers/{accountId}:
+    get:
+      tags: [Official Accounts]
+      operationId: listOfficialPhoneNumbers
+      summary: List phone numbers for a WABA official account
+      x-permission: official:phone-numbers:list
+      parameters:
+        - { name: accountId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/OfficialListEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/official/templates/{accountId}:
+    get:
+      tags: [Official Templates]
+      operationId: listOfficialTemplates
+      summary: List APPROVED templates for a WABA account
+      x-permission: official:templates:list
+      parameters:
+        - { name: accountId, in: path, required: true, schema: { type: string } }
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [MARKETING, UTILITY, AUTHENTICATION, OTP]
+      responses:
+        '200': { $ref: '#/components/responses/OfficialListEnvelope' }
+
+  /api/v1/official/messages:
+    post:
+      tags: [Official Messages]
+      operationId: sendOfficialTemplateMessage
+      summary: Send a WABA official template message
+      x-permission: official:message:send
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfficialSendTemplateRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OfficialObjectEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/v1/official/broadcasts:
+    post:
+      tags: [Official Broadcasts]
+      operationId: createOfficialBroadcast
+      summary: Create a WABA official broadcast
+      description: Max 1000 recipients per day, grouped by `scheduled_at` date.
+      x-permission: official:broadcast:send
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfficialBroadcastRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/OfficialObjectEnvelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    get:
+      tags: [Official Broadcasts]
+      operationId: listOfficialBroadcasts
+      summary: List WABA official broadcasts created through the API
+      x-permission: official:broadcast:list
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 10 } }
+        - { name: status, in: query, schema: { type: string, example: completed } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/OfficialListEnvelope' }
+
+  /api/v1/official/broadcasts/{broadcastId}/monitoring:
+    get:
+      tags: [Official Broadcasts]
+      operationId: getOfficialBroadcastMonitoring
+      summary: Get delivery monitoring for a broadcast
+      x-permission: official:broadcast:monitoring
+      parameters:
+        - { name: broadcastId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/OfficialObjectEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/official/shared-waba/otp/{serial_token}:
+    post:
+      tags: [Official Messages]
+      operationId: sendSharedWabaOtp
+      summary: Send an OTP through a shared WABA serial token
+      x-permission: official:message:send
+      parameters:
+        - { name: serial_token, in: path, required: true, schema: { type: string, minLength: 10 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { type: string, minLength: 8 }
+                otp_code: { type: [string, 'null'] }
+                metadata: { type: [object, 'null'], additionalProperties: true }
+      responses:
+        '200':
+          description: OTP sent.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message_id: { type: [string, 'null'] }
+                          otp_code: { type: [string, 'null'] }
+                          serial_token: { type: [string, 'null'] }
+
+  /v2/integration:
+    get:
+      tags: [Credentials]
+      operationId: getApiAccess
+      summary: Get the current API credential for the logged-in user
+      security:
+        - BearerAuth: []
+          Fingerprint: []
+      responses:
+        '200':
+          description: Credential (or `data: null` if none requested yet).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  message: { type: string }
+                  data:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/ApiCredential'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Credentials]
+      operationId: requestApiAccess
+      summary: Request API access (creates a pending credential)
+      security:
+        - BearerAuth: []
+          Fingerprint: []
+      responses:
+        '200':
+          description: Request registered; awaiting admin approval.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  message: { type: string }
+                  data: { $ref: '#/components/schemas/ApiCredential' }
+        '400':
+          description: Already has access / already pending / previously revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v2/integration/regenerate:
+    post:
+      tags: [Credentials]
+      operationId: regenerateApiAccess
+      summary: Regenerate api_key + secret_key (only when status is active)
+      security:
+        - BearerAuth: []
+          Fingerprint: []
+      responses:
+        '200':
+          description: New credential. `secret_key` is returned in plaintext once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  message: { type: string }
+                  data: { $ref: '#/components/schemas/ApiCredential' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v2/integration/messages:
+    get:
+      tags: [Credentials]
+      operationId: listApiMessages
+      summary: Paginated history of messages sent through the API
+      security:
+        - BearerAuth: []
+          Fingerprint: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        '200':
+          description: Messages.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: integer }
+                  message: { type: string }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+
+  /v2/integration/webhook:
+    post:
+      tags: [Credentials]
+      operationId: subscribeWebhook
+      summary: Register (and verify) the integrator webhook endpoint
+      description: |
+        The server first performs a verification `GET` to `webhook_url` with a
+        `verify_token` query param and an `x-hub-token` header; the endpoint must
+        answer `200` and echo the token. Only then is the URL stored.
+      security:
+        - BearerAuth: []
+          Fingerprint: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [webhook_url]
+              properties:
+                webhook_url: { type: string, format: uri }
+                verify_token: { type: string }
+      responses:
+        '200':
+          description: Webhook registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: integer }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      webhook_url: { type: string }
+                      webhook_verify_token: { type: string }
+                      status: { type: string }
+                      approved_at: { type: [string, 'null'] }
+                      created_at: { type: [string, 'null'] }
+                      updated_at: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+webhooks:
+  messageReceived:
+    post:
+      summary: Inbound message from a customer
+      description: |
+        Delivered to the registered `webhook_url` with header
+        `x-hub-token: <verify_token>`. There is no HMAC signature on the payload;
+        verify by comparing `x-hub-token`.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEvent' }
+      responses:
+        '200': { description: Acknowledge receipt. }
+  messageStatuses:
+    post:
+      summary: Outbound message status change (sent / delivered / read / failed)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEvent' }
+      responses:
+        '200': { description: Acknowledge receipt. }
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+    Timestamp:
+      type: apiKey
+      in: header
+      name: x-timestamp
+    Signature:
+      type: apiKey
+      in: header
+      name: x-signature
+    BearerAuth:
+      type: http
+      scheme: bearer
+    Fingerprint:
+      type: apiKey
+      in: header
+      name: fingerprint
+
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Missing / invalid authentication headers.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Invalid API key / signature, missing permission scope, or plan without API access.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ErrorEnvelope'
+              - $ref: '#/components/schemas/EntitlementErrorEnvelope'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: Duplicate `message_id`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    SignatureExpired:
+      description: `x-timestamp` outside the allowed window.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationError:
+      description: Request body failed validation.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorEnvelope' }
+    RateLimited:
+      description: Daily API hit quota exceeded.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/EntitlementErrorEnvelope' }
+    OfficialListEnvelope:
+      description: Standard envelope with an array `data`.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiEnvelope'
+              - type: object
+                properties:
+                  data: { type: array, items: { type: object, additionalProperties: true } }
+    OfficialObjectEnvelope:
+      description: Standard envelope with an object `data`.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiEnvelope'
+              - type: object
+                properties:
+                  data: { type: object, additionalProperties: true }
+
+  schemas:
+    ApiEnvelope:
+      type: object
+      properties:
+        status: { type: integer, example: 200 }
+        message: { type: string }
+        data: {}
+        metadata:
+          type: object
+          properties:
+            timestamp: { type: integer }
+          additionalProperties: true
+      required: [status, message]
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        status: { type: integer, example: 403 }
+        message: { type: string }
+        data: { type: 'null' }
+        metadata:
+          type: object
+          properties:
+            timestamp: { type: integer }
+      required: [status, message]
+
+    ValidationErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ErrorEnvelope'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  message: { type: string }
+                  path:
+                    type: array
+                    items: { type: [string, integer] }
+
+    EntitlementErrorEnvelope:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string }
+      required: [success, message]
+
+    PageMetadata:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        total_pages: { type: integer }
+        timestamp: { type: integer }
+
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        total_pages: { type: integer }
+
+    Account:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: [string, 'null'] }
+        phone_number: { type: [string, 'null'] }
+
+    SendMessageRequest:
+      type: object
+      required: [message_id, channel, account, receiver, content]
+      properties:
+        message_id:
+          type: string
+          description: Client-generated, globally unique. Duplicate ⇒ `409`.
+        channel:
+          type: string
+          enum: [whatsapp, telegram, messanger, instagram]
+          description: '`messanger` spelling is intentional (server enum).'
+        account:
+          type: object
+          required: [account_id]
+          properties:
+            account_id: { type: string, description: Mongo ObjectId of a connected account. }
+        receiver:
+          type: object
+          required: [phone_number, name]
+          properties:
+            phone_number:
+              type: string
+              pattern: '^(?:\+62|62|08)[0-9]{7,12}$'
+              maxLength: 15
+            name: { type: string, minLength: 1 }
+        content: { $ref: '#/components/schemas/MessageContent' }
+
+    MessageContent:
+      type: object
+      required: [type, data]
+      properties:
+        type: { type: string, enum: [text, image, video, document] }
+        data:
+          type: object
+          properties:
+            text: { type: string, description: Required for `type: text`. }
+            url: { type: string, description: Required for image / video / document. }
+            caption: { type: string }
+            mime_type: { type: string, description: Required for `type: document`. }
+            file_name: { type: string, description: Required for `type: document`. }
+
+    Message:
+      type: object
+      properties:
+        message_id: { type: string }
+        channel: { type: string }
+        account:
+          oneOf:
+            - $ref: '#/components/schemas/Account'
+            - type: string
+        account_id: { type: string }
+        receiver:
+          type: object
+          properties:
+            phone_number: { type: string }
+            name: { type: string }
+            jid: { type: string }
+        content: { $ref: '#/components/schemas/MessageContent' }
+        sent: { type: boolean }
+        sent_at:
+          oneOf:
+            - type: integer
+            - type: string
+            - type: 'null'
+
+    OfficialSendTemplateRequest:
+      type: object
+      required: [phone_number_id, to, template]
+      properties:
+        phone_number_id: { type: string }
+        to: { type: string }
+        template:
+          type: object
+          required: [id, name, category]
+          properties:
+            id: { type: string, minLength: 10 }
+            name:
+              type: string
+              minLength: 3
+              pattern: '^[a-z0-9_]+$'
+            category:
+              type: string
+              enum: [TRANSACTIONAL, MARKETING, OTP, UTILITY, AUTHENTICATION]
+            parameters:
+              type: object
+              properties:
+                attachment:
+                  type: object
+                  properties:
+                    type: { type: string, enum: [image, video, document] }
+                    link: { type: string }
+                    mime_type: { type: string }
+                    filename: { type: string }
+                    original_name: { type: string }
+                    filesize: { type: number }
+                variables:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: { type: string, enum: [dynamic, custom] }
+                      name: { type: string }
+                      value: { type: string }
+
+    OfficialBroadcastRequest:
+      type: object
+      required: [account_id, template_id, phone_number_id, name, scheduled_at, request_id, recipients]
+      properties:
+        account_id: { type: string }
+        template_id: { type: string }
+        phone_number_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        scheduled_at: { type: string, example: '2026-04-08 10:00:00' }
+        request_id: { type: string, description: Idempotency key for the broadcast. }
+        variables:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              value: { type: string }
+        location:
+          type: object
+          additionalProperties: true
+        recipients:
+          type: array
+          items:
+            type: object
+            required: [phone_number]
+            properties:
+              phone_number: { type: string }
+              attachment:
+                type: object
+                properties:
+                  type: { type: string, enum: [image, video, document] }
+                  link: { type: string }
+                  mime_type: { type: string }
+                  file_name: { type: string }
+
+    ApiCredential:
+      type: object
+      properties:
+        api_key: { type: [string, 'null'] }
+        secret_key: { type: [string, 'null'], description: Plaintext, returned once on request / regenerate; decrypted on GET. }
+        permissions:
+          type: array
+          items: { type: string }
+        status: { type: string, enum: [pending, active, revoked] }
+        approved_at: { type: [string, 'null'] }
+        requested_at: { type: [string, 'null'] }
+        regenerated_at: { type: [string, 'null'] }
+
+    WebhookEvent:
+      type: object
+      properties:
+        event: { type: string, enum: [message.received, message.statuses] }
+        event_name: { type: string }
+        event_version: { type: [integer, 'null'] }
+        event_at: { type: string, format: date-time }
+        timestamp: { type: integer, description: Unix seconds. }
+        source: { type: string, example: crm_chatroom }
+        channel: { type: string, example: whatsapp }
+        provider: { type: [string, 'null'], example: official }
+        user:
+          type: object
+          properties:
+            id: { type: [integer, 'null'] }
+        account: { type: [object, 'null'], additionalProperties: true }
+        conversation: { type: [object, 'null'], additionalProperties: true }
+        message: { type: [object, 'null'], additionalProperties: true }
+        statuses: { type: [object, 'null'], additionalProperties: true }
+        recipient: { type: [object, 'null'], additionalProperties: true }
+        meta: { type: [object, 'null'], additionalProperties: true }
+        data: { type: [object, 'null'], additionalProperties: true }

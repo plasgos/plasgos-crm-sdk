@@ -1,0 +1,23 @@
+{
+  "_comment": "Golden HMAC-SHA256 signature vectors. signature = hex(hmac_sha256(secret_key, api_key + ':' + timestamp)). Shared by the Node/PHP/Python test suites.",
+  "vectors": [
+    {
+      "api_key": "d4c997dd136d31fb9b433b269764a2774d35809e438684c3ad372d27305ac026",
+      "secret_key": "plg_0512d9ed263f7f22130e04a64f2da5bd0d461f8d398e55d796e6f1a463704266",
+      "timestamp": 1700000000,
+      "signature": "b7fdcd265c1b113431962188f80307522c15f9e65b0f401e5f059a0dceaf8ce7"
+    },
+    {
+      "api_key": "test_key",
+      "secret_key": "test_secret",
+      "timestamp": 1700000000,
+      "signature": "e18a0c152134399f8efa60f058ced975a2f24657e231c3bd95351d527a3c1fcb"
+    },
+    {
+      "api_key": "ak_live_123",
+      "secret_key": "sk_live_abc",
+      "timestamp": 1735689600,
+      "signature": "8a02698f8628bd760ca9148215ecb61933729dbc77e8d433a6ffa876c6069dd8"
+    }
+  ]
+}

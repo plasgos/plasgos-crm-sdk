@@ -1,0 +1,26 @@
+# Node
+node_modules/
+packages/node/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# PHP
+packages/php/vendor/
+packages/php/composer.lock
+.phpunit.result.cache
+.phpunit.cache/
+
+# Python
+packages/python/dist/
+packages/python/build/
+packages/python/.venv/
+packages/python/*.egg-info/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
