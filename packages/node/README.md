@@ -14,6 +14,32 @@ Official Node.js / TypeScript SDK for the **Plasgos CRM — Api Integration** AP
 npm install plasgos-crm-sdk
 ```
 
+## Module formats — ESM & CommonJS
+
+The package ships **both** builds and works unchanged whether your project uses
+`import` or `require`.
+
+```js
+// ESM  (package.json "type": "module", or a .mjs file, or TS/bundler)
+import { PlasgosCrmClient } from "plasgos-crm-sdk";
+import { verifyWebhook } from "plasgos-crm-sdk/webhooks";
+```
+
+```js
+// CommonJS  (default .js, or a .cjs file)
+const { PlasgosCrmClient } = require("plasgos-crm-sdk");
+const { verifyWebhook } = require("plasgos-crm-sdk/webhooks");
+```
+
+Resolved via the `exports` map: `import` → `dist/index.js` (ESM),
+`require` → `dist/index.cjs` (CommonJS). Type declarations are provided for both
+module resolutions (`.d.ts` / `.d.cts`), so `moduleResolution: "node16" |
+"nodenext" | "bundler"` all resolve correctly. `verifyWebhook` and the webhook
+types are re-exported from the package root too, so the `/webhooks` subpath is
+optional.
+
+Requires Node.js 18+.
+
 ## Quick start (signed API)
 
 ```ts

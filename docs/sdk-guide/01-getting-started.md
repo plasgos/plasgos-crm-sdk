@@ -30,6 +30,24 @@ npm install plasgos-crm-sdk
 Tidak ada dependency runtime (memakai `fetch` & `crypto` bawaan Node 18+).
 Type definitions sudah termasuk.
 
+Paket ini dikirim dalam **dua format** dan jalan tanpa perubahan baik dengan
+`import` (ESM) maupun `require` (CommonJS):
+
+```js
+// ESM
+import { PlasgosCrmClient } from "plasgos-crm-sdk";
+import { verifyWebhook } from "plasgos-crm-sdk/webhooks";
+
+// CommonJS
+const { PlasgosCrmClient } = require("plasgos-crm-sdk");
+const { verifyWebhook } = require("plasgos-crm-sdk/webhooks");
+```
+
+Deklarasi tipe tersedia untuk kedua resolusi (`.d.ts` / `.d.cts`), jadi
+`moduleResolution` `node16` / `nodenext` / `bundler` semuanya cocok.
+`verifyWebhook` juga di-re-export dari entry utama, sehingga subpath
+`/webhooks` opsional.
+
 ### PHP
 
 ```bash

@@ -3,6 +3,7 @@ node_modules/
 packages/node/dist/
 *.tsbuildinfo
 npm-debug.log*
+*.tgz
 
 # PHP
 packages/php/vendor/

@@ -32,6 +32,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Verify CommonJS + ESM consumption
+        run: node scripts/smoke-consume.mjs
 
       - name: Verify tag matches package.json version
         run: |
