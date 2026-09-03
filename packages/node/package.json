@@ -1,6 +1,6 @@
 {
   "name": "plasgos-crm-sdk",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Official Node.js / TypeScript SDK for the Plasgos CRM Api Integration API.",
   "keywords": [
     "plasgos",

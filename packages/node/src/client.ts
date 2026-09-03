@@ -6,7 +6,7 @@ import { ReferencesResource } from "./resources/references.js";
 import { OfficialNamespace } from "./resources/official/index.js";
 import { resolveBaseUrl, type ClientOptions } from "./types.js";
 
-const SDK_VERSION = "1.0.2";
+const SDK_VERSION = "1.0.4";
 const DEFAULT_TIMEOUT = 15_000;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_SIGNATURE_TTL = 300;
