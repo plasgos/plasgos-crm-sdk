@@ -15,7 +15,9 @@ final class Webhooks extends AbstractResource
     }
 
     /**
-     * `data['signing_secret']` is returned ONLY here — store it.
+     * `data['signing_secret']` is returned ONLY here — store it. The URL must be https and public
+     * (ValidationException `webhook_url_invalid`; details in `->fields`), max 5 per tenant
+     * (ConflictException `webhook_limit_reached`). `webhook.test` cannot be subscribed to.
      *
      * @param array{url: string, events: list<string>, description?: string|null} $subscription
      */
@@ -41,7 +43,10 @@ final class Webhooks extends AbstractResource
         return $this->http->request('POST', self::path('webhooks', $webhookId, 'test'), body: new \stdClass());
     }
 
-    /** New signing secret; the previous one stays valid for 24 hours. */
+    /**
+     * New signing secret; the previous one stays valid for 24 hours — deliveries carry both
+     * signatures meanwhile (`v1=new,v1=old`), which `Webhook::verify()` accepts.
+     */
     public function rotateSecret(string $webhookId): Response
     {
         return $this->http->request('POST', self::path('webhooks', $webhookId, 'rotate-secret'), body: new \stdClass());

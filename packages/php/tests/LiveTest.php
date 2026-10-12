@@ -146,6 +146,24 @@ final class LiveTest extends TestCase
         }
     }
 
+    /** V5 — webhook subscriptions, read only; skipped when the key lacks webhooks:manage. */
+    public function testWebhooksReadPaths(): void
+    {
+        $client = new Client((string) getenv('PLASGOS_LIVE_API_KEY'), (string) getenv('PLASGOS_LIVE_SECRET_KEY'), $this->config());
+        $me = $client->me->get();
+        if (! in_array('webhooks:manage', $me->data['scopes'] ?? [], true)) {
+            self::markTestSkipped('key has no webhooks:manage scope');
+        }
+        $list = $client->webhooks->list();
+        self::assertCount((int) $me->data['webhooks']['count'], $list->data);
+        try {
+            $client->webhooks->test('66f1abcdabcdabcdabcdab99');
+            self::fail('expected NotFoundException');
+        } catch (NotFoundException $e) {
+            self::assertSame('webhook_not_found', $e->errorCode);
+        }
+    }
+
     public function testWrongSecretIsRejected(): void
     {
         $client = new Client((string) getenv('PLASGOS_LIVE_API_KEY'), 'plg_wrong', $this->config());

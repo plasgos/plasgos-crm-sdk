@@ -2987,7 +2987,7 @@
         ],
         "operationId": "createWebhook",
         "summary": "Daftarkan URL webhook",
-        "description": "Maksimal 5 per tenant. Hanya `https`, bukan IP privat/localhost. `signing_secret` hanya muncul di respons ini.",
+        "description": "Maksimal 5 per tenant (`409 webhook_limit_reached`). Hanya `https` ke alamat publik (`422 webhook_url_invalid`). `signing_secret` hanya muncul di respons ini — simpan.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3110,8 +3110,9 @@
                   },
                   "events": {
                     "type": "array",
+                    "minItems": 1,
                     "items": {
-                      "$ref": "#/components/schemas/WebhookEventType"
+                      "$ref": "#/components/schemas/WebhookSubscribableEvent"
                     }
                   },
                   "description": {
@@ -3122,9 +3123,11 @@
                     "maxLength": 120
                   },
                   "enabled": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "`true` pada langganan yang dinonaktifkan otomatis menghidupkannya lagi dari nol."
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -3421,7 +3424,8 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           }
-        }
+        },
+        "description": "Secret baru berlaku seketika; secret lama tetap sah 24 jam. Selama itu `Plasgos-Webhook-Signature` memuat dua tanda tangan (`v1=<baru>,v1=<lama>`)."
       }
     }
   },
@@ -3429,7 +3433,7 @@
     "event": {
       "post": {
         "summary": "Event yang dikirim Plasgos CRM ke URL langganan",
-        "description": "Header: `Plasgos-Webhook-Id`, `Plasgos-Webhook-Timestamp`, `Plasgos-Webhook-Signature`\n(`v1=` + hex(HMAC-SHA256(signing_secret, id + \".\" + timestamp + \".\" + raw_body))).\nBalas 2xx dalam 10 detik. Pengiriman bisa terulang — abaikan `id` yang sudah diproses.\n",
+        "description": "Header: `Plasgos-Webhook-Id`, `Plasgos-Webhook-Timestamp`, `Plasgos-Webhook-Signature`\n(`v1=` + hex(HMAC-SHA256(signing_secret, id + \".\" + timestamp + \".\" + raw_body)); dua nilai dipisah koma selama 24 jam setelah rotasi secret).\nBalas 2xx dalam 10 detik; redirect tidak diikuti. Gagal → dicoba lagi 8× (1 mnt, 5 mnt, 30 mnt, 1, 2, 4, 8, 8 jam) dengan `id` & isi yang sama — abaikan `id` yang sudah diproses.\nLangganan yang gagal terus selama 3 hari dinonaktifkan (`disabled_reason: too_many_failures`); aktifkan lagi lewat `PATCH /webhooks/{id}` `{\"enabled\": true}`.\n`data` dibangun saat percobaan pertama, bentuknya sama dengan GET di API: Message (`message.*`), Contact (`contact.*`), Lead (`lead.*`), Broadcast (`broadcast.completed`, hanya broadcast buatan API), Enrollment (`followup.enrollment.*`), DealEvent (`deal.*`). Status pesan \"dibaca sampai\" (Instagram/Messenger) tanpa id pesan tidak dikirim.\n",
         "parameters": [
           {
             "name": "Plasgos-Webhook-Id",
@@ -3453,8 +3457,9 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^v1=[0-9a-f]{64}$"
-            }
+              "pattern": "^v1=[0-9a-f]{64}(,v1=[0-9a-f]{64})?$"
+            },
+            "description": "Satu `v1=`; dua (dipisah koma) selama 24 jam setelah rotasi secret. Cocokkan dengan salah satu."
           }
         ],
         "requestBody": {
@@ -3467,7 +3472,7 @@
                 "id": "evt_01JA2ZB8N4C6",
                 "type": "message.received",
                 "api_version": "v3",
-                "created_at": "2026-10-09T03:15:00Z",
+                "created_at": "2026-10-09T03:15:00.000Z",
                 "data": {
                   "id": "msg_01JA2ZD1",
                   "conversation_id": "cv_01J8ZB",
@@ -3484,11 +3489,8 @@
                   "status": "delivered",
                   "error": null,
                   "client_reference": null,
-                  "created_at": "2026-10-09T03:15:00Z",
-                  "sent_at": null,
-                  "delivered_at": "2026-10-09T03:15:00Z",
-                  "read_at": null,
-                  "failed_at": null
+                  "created_at": "2026-10-09T03:15:00.000Z",
+                  "timestamp": "2026-10-09T03:15:00.000Z"
                 }
               }
             }
@@ -6148,14 +6150,16 @@
           "url": {
             "type": "string",
             "format": "uri",
-            "pattern": "^https://"
+            "pattern": "^https://",
+            "description": "Wajib https dan alamat publik (IP privat, localhost, `::ffff:`, CGNAT, dan hasil DNS ke alamat privat ditolak). Diperiksa lagi saat kirim."
           },
           "events": {
             "type": "array",
             "minItems": 1,
             "items": {
-              "$ref": "#/components/schemas/WebhookEventType"
-            }
+              "$ref": "#/components/schemas/WebhookSubscribableEvent"
+            },
+            "description": "Duplikat dibuang. `webhook.test` hanya dikirim lewat `POST /webhooks/{id}/test`."
           },
           "description": {
             "type": [
@@ -6164,7 +6168,8 @@
             ],
             "maxLength": 120
           }
-        }
+        },
+        "additionalProperties": false
       },
       "WebhookSubscription": {
         "type": "object",
@@ -6348,6 +6353,91 @@
           },
           "message": {
             "type": "string"
+          }
+        }
+      },
+      "WebhookSubscribableEvent": {
+        "type": "string",
+        "enum": [
+          "message.received",
+          "message.status_updated",
+          "contact.created",
+          "contact.updated",
+          "lead.created",
+          "lead.stage_changed",
+          "deal.won",
+          "deal.lost",
+          "broadcast.completed",
+          "followup.enrollment.completed",
+          "followup.enrollment.stopped"
+        ]
+      },
+      "DealEvent": {
+        "type": "object",
+        "description": "Data event `deal.won` / `deal.lost` (v3.0 belum punya endpoint deal).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pipeline_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stage": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurred_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       }

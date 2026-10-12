@@ -40,6 +40,11 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - `followups->enroll()`: no per-enrollment `variables` in v3.0; `meta['created']` tells whether it
   was a new enrollment. `unenroll()` of a never-enrolled contact → `enrollment_not_found`.
 
+### Aligned with the server (API v3 phase V5)
+- Webhook deliveries: 8 retries over ~24 h with the same `Plasgos-Webhook-Id` and body; subscriptions
+  failing for 3 days are disabled (`disabled_reason: too_many_failures`, re-enable with `update(['enabled' => true])`).
+- During the 24 h after `rotateSecret()` the signature header carries two `v1=` values.
+
 ### Changed (breaking)
 - The v1 client is renamed to `LegacyClient`, and its types moved to `Plasgos\CrmSdk\Legacy\*`.
   See UPGRADING.md.
