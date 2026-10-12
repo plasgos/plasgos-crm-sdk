@@ -110,6 +110,42 @@ final class LiveTest extends TestCase
         }
     }
 
+    /** V4 — read paths + validation only; skipped when the key lacks broadcasts/followups scopes. */
+    public function testBroadcastsAndFollowupsReadPaths(): void
+    {
+        $client = new Client((string) getenv('PLASGOS_LIVE_API_KEY'), (string) getenv('PLASGOS_LIVE_SECRET_KEY'), $this->config());
+        $scopes = $client->me->get()->data['scopes'] ?? [];
+        if (! in_array('broadcasts:read', $scopes, true) || ! in_array('followups:read', $scopes, true)) {
+            self::markTestSkipped('key has no broadcasts:read / followups:read scope');
+        }
+
+        $broadcasts = $client->broadcasts->list(['per_page' => 1]);
+        self::assertArrayHasKey('total', $broadcasts->pagination);
+        $followups = $client->followups->list(['per_page' => 1]);
+        self::assertArrayHasKey('total', $followups->pagination);
+
+        try {
+            $client->broadcasts->get('66f1eeeeeeeeeeeeeeeeee99');
+            self::fail('expected NotFoundException');
+        } catch (NotFoundException $e) {
+            self::assertSame('broadcast_not_found', $e->errorCode);
+        }
+        try {
+            $client->followups->get('66f1ffffffffffffffffff99');
+            self::fail('expected NotFoundException');
+        } catch (NotFoundException $e) {
+            self::assertSame('followup_not_found', $e->errorCode);
+        }
+        if (in_array('broadcasts:write', $scopes, true)) {
+            try {
+                $client->broadcasts->create(['name' => 'x', 'endpoint_id' => 'x', 'content' => Content::text('uji'), 'audience' => ['recipients' => [['phone_number' => '081234567890']]]]);
+                self::fail('expected ValidationException');
+            } catch (ValidationException $e) {
+                self::assertSame('validation_failed', $e->errorCode);
+            }
+        }
+    }
+
     public function testWrongSecretIsRejected(): void
     {
         $client = new Client((string) getenv('PLASGOS_LIVE_API_KEY'), 'plg_wrong', $this->config());

@@ -31,16 +31,20 @@ final class Followups extends AbstractResource
     }
 
     /**
-     * 201 enrolled; 200 when already actively enrolled.
+     * 201 enrolled; 200 with `meta['created'] === false` when the contact is still actively enrolled
+     * (never scheduled twice). Inactive sequence → ConflictException `followup_not_active`.
      *
-     * @param array<string, mixed> $enrollment `contact_id` OR `contact`, start_at?, variables?, client_reference?
+     * @param array<string, mixed> $enrollment `contact_id` OR `contact`, start_at?, client_reference?
      */
     public function enroll(string $followupId, array $enrollment, ?string $idempotencyKey = null): Response
     {
         return $this->http->request('POST', self::path('followups', $followupId, 'enrollments'), body: $enrollment, idempotencyKey: $idempotencyKey);
     }
 
-    /** Stop the sequence for one contact (idempotent). */
+    /**
+     * Stop the sequence for one contact; queued messages are removed (idempotent, `meta['stopped_messages']`).
+     * A contact that was never enrolled → NotFoundException `enrollment_not_found`.
+     */
     public function unenroll(string $followupId, string $contactId): Response
     {
         return $this->http->request('DELETE', self::path('followups', $followupId, 'enrollments', $contactId));

@@ -34,6 +34,12 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - `leads->create()`: whether a lead was created is `meta['created']` (plus `meta['contact_created']`);
   `data` is always the lead. One active lead per contact across all pipelines.
 
+### Aligned with the server (API v3 phase V4)
+- `broadcasts->create()`: official WhatsApp templates only in v3.0; audience max 1000 recipients;
+  no per-recipient variables and no `sending` options.
+- `followups->enroll()`: no per-enrollment `variables` in v3.0; `meta['created']` tells whether it
+  was a new enrollment. `unenroll()` of a never-enrolled contact → `enrollment_not_found`.
+
 ### Changed (breaking)
 - The v1 client is renamed to `LegacyClient`, and its types moved to `Plasgos\CrmSdk\Legacy\*`.
   See UPGRADING.md.
