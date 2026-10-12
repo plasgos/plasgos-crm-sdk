@@ -13,8 +13,8 @@ final class TemplateContent implements \JsonSerializable
     /** @var list<array{param: string, type: string, value: string}> */
     private array $variables = [];
 
-    /** @var array{url: string, file_name: ?string}|null */
-    private ?array $headerMedia = null;
+    /** @var array{latitude: float, longitude: float, name: ?string, address: ?string}|null */
+    private ?array $location = null;
 
     public function __construct(private readonly string $templateId) {}
 
@@ -30,9 +30,13 @@ final class TemplateContent implements \JsonSerializable
         return $this->variable($param, 'custom', $value);
     }
 
-    public function headerMedia(string $url, ?string $fileName = null): self
+    /**
+     * Required only for templates with a LOCATION header. Image/video/document headers always use
+     * the media of the approved template.
+     */
+    public function location(float $latitude, float $longitude, ?string $name = null, ?string $address = null): self
     {
-        $this->headerMedia = ['url' => $url, 'file_name' => $fileName];
+        $this->location = ['latitude' => $latitude, 'longitude' => $longitude, 'name' => $name, 'address' => $address];
         return $this;
     }
 
@@ -40,8 +44,8 @@ final class TemplateContent implements \JsonSerializable
     public function toArray(): array
     {
         $template = ['template_id' => $this->templateId, 'variables' => $this->variables];
-        if ($this->headerMedia !== null) {
-            $template['header_media'] = $this->headerMedia;
+        if ($this->location !== null) {
+            $template['location'] = $this->location;
         }
         return ['type' => 'template', 'template' => $template];
     }

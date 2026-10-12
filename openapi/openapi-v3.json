@@ -317,8 +317,12 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
           }
-        }
+        },
+        "description": "Titik kirim milik tenant di semua channel yang termasuk paketnya. `channel`/`transport` tak dikenal → 422 `invalid_channel`/`invalid_transport` dengan `error.details.allowed`."
       }
     },
     "/endpoints/{endpoint_id}": {
@@ -399,7 +403,7 @@
         ],
         "operationId": "listEndpointTemplates",
         "summary": "Template WhatsApp yang disetujui untuk titik kirim WABA",
-        "description": "Titik kirim selain WhatsApp resmi menjawab daftar kosong.",
+        "description": "Template yang DISETUJUI dari sinkron terakhir dengan Meta (sinkron dilakukan dari halaman template dashboard). Titik kirim selain WhatsApp resmi menjawab daftar kosong; titik kirim tenant lain → 404 `endpoint_not_found`.",
         "parameters": [
           {
             "name": "category",
@@ -600,6 +604,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "endpoint_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Akun tempat identitas Instagram/Messenger dikenal (bersama `channel` + `external_id`)."
           }
         ],
         "responses": {
@@ -652,122 +664,14 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
     },
     "/messages": {
-      "get": {
-        "tags": [
-          "Pesan"
-        ],
-        "operationId": "listMessages",
-        "summary": "Riwayat pesan yang dikirim lewat API",
-        "parameters": [
-          {
-            "name": "contact_id",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "endpoint_id",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/MessageStatus"
-            }
-          },
-          {
-            "name": "client_reference",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "created_from",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "created_to",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PerPage"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/XRequestId"
-              },
-              "RateLimit-Limit": {
-                "$ref": "#/components/headers/RateLimitLimit"
-              },
-              "RateLimit-Remaining": {
-                "$ref": "#/components/headers/RateLimitRemaining"
-              },
-              "RateLimit-Reset": {
-                "$ref": "#/components/headers/RateLimitReset"
-              },
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/IdempotentReplayed"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/ListEnvelope"
-                    },
-                    {
-                      "properties": {
-                        "data": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/Message"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          }
-        }
-      },
       "post": {
         "tags": [
           "Pesan"
@@ -930,17 +834,16 @@
                       "template": {
                         "template_id": "66f1a2b3c4d5e6f708192a3b",
                         "name": "order_processing",
-                        "language": "id"
+                        "language": "id",
+                        "category": "utility",
+                        "preview": null
                       }
                     },
-                    "status": "sent",
+                    "status": "pending",
                     "error": null,
                     "client_reference": "wc_order_1234_processing",
-                    "created_at": "2026-10-09T03:15:00Z",
-                    "sent_at": "2026-10-09T03:15:01Z",
-                    "delivered_at": null,
-                    "read_at": null,
-                    "failed_at": null
+                    "created_at": "2026-10-09T03:15:00.000Z",
+                    "timestamp": "2026-10-09T03:15:00.000Z"
                   },
                   "meta": {
                     "request_id": "req_01JA2Z7K3M9Q4X8T",
@@ -4143,7 +4046,8 @@
           "name",
           "label",
           "transports",
-          "entitled"
+          "entitled",
+          "operational"
         ],
         "properties": {
           "name": {
@@ -4164,6 +4068,10 @@
           "entitled": {
             "type": "boolean",
             "description": "Termasuk paket langganan tenant"
+          },
+          "operational": {
+            "type": "boolean",
+            "description": "Channel benar-benar bisa dipakai mengirim saat ini"
           }
         }
       },
@@ -4174,9 +4082,12 @@
           "channel",
           "transport",
           "label",
+          "name",
           "address",
           "status",
-          "capabilities"
+          "status_detail",
+          "capabilities",
+          "created_at"
         ],
         "properties": {
           "id": {
@@ -4187,20 +4098,26 @@
             "$ref": "#/components/schemas/ChannelName"
           },
           "transport": {
-            "$ref": "#/components/schemas/Transport"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Transport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null untuk channel tanpa transport (Instagram, Messenger)"
           },
           "label": {
             "type": "string",
-            "examples": [
-              "CS Toko"
-            ]
+            "description": "Nama tampilan; bisa diganti tenant di dashboard"
           },
           "address": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Nomor E.164 atau nama akun",
+            "description": "Alamat asli: nomor E.164 (WhatsApp) atau @username (Instagram) — tidak ikut berubah bila label diganti",
             "examples": [
               "+6281100000001"
             ]
@@ -4224,7 +4141,7 @@
             "properties": {
               "can_initiate": {
                 "type": "boolean",
-                "description": "Bisnis boleh memulai percakapan"
+                "description": "Bisnis boleh memulai percakapan: WhatsApp resmi (dengan template) & WhatsApp perangkat"
               },
               "requires_template_outside_window": {
                 "type": "boolean"
@@ -4236,9 +4153,31 @@
                 }
               },
               "broadcast": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Hanya WhatsApp"
               }
             }
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nama terverifikasi/akun di channel"
+          },
+          "status_detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Status mentah dari penyedia (mis. connected, active, disconnected)"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -4251,6 +4190,8 @@
           "language",
           "category",
           "status",
+          "parameter_format",
+          "preview",
           "parameters",
           "header"
         ],
@@ -4260,8 +4201,11 @@
             "description": "Dipakai sebagai content.template.template_id"
           },
           "meta_template_id": {
-            "type": "string",
-            "description": "Id Meta; juga diterima sebagai template_id"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id template di Meta; juga diterima sebagai template_id"
           },
           "name": {
             "type": "string",
@@ -4270,17 +4214,21 @@
             ]
           },
           "language": {
-            "type": "string",
-            "examples": [
-              "id"
+            "type": [
+              "string",
+              "null"
             ]
           },
           "category": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "enum": [
               "marketing",
               "utility",
-              "authentication"
+              "authentication",
+              null
             ]
           },
           "status": {
@@ -4298,7 +4246,7 @@
           },
           "parameters": {
             "type": "array",
-            "description": "Variabel yang wajib dipetakan di `variables`",
+            "description": "Variabel yang wajib dipetakan di content.template.variables (kunci param persis: named, header.N, button.N)",
             "items": {
               "type": "object",
               "required": [
@@ -4346,7 +4294,15 @@
                   "location"
                 ]
               }
-            }
+            },
+            "description": "Format header; media/lokasi bukan variabel"
+          },
+          "parameter_format": {
+            "type": "string",
+            "enum": [
+              "named",
+              "positional"
+            ]
           }
         }
       },
@@ -4559,7 +4515,8 @@
                       "null"
                     ]
                   }
-                }
+                },
+                "description": "URL diunduh oleh channel/server — wajib alamat publik (alamat privat/lokal ditolak `media_url_rejected`)."
               }
             }
           },
@@ -4589,18 +4546,30 @@
                       "$ref": "#/components/schemas/TemplateVariableValue"
                     }
                   },
-                  "header_media": {
+                  "location": {
                     "type": [
                       "object",
                       "null"
                     ],
-                    "description": "Menimpa media header bawaan template",
+                    "description": "Wajib hanya untuk template berheader LOKASI. Header gambar/video/dokumen memakai media template yang disetujui.",
+                    "required": [
+                      "latitude",
+                      "longitude"
+                    ],
                     "properties": {
-                      "url": {
-                        "type": "string",
-                        "format": "uri"
+                      "latitude": {
+                        "type": "number"
                       },
-                      "file_name": {
+                      "longitude": {
+                        "type": "number"
+                      },
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "address": {
                         "type": [
                           "string",
                           "null"
@@ -4608,7 +4577,8 @@
                       }
                     }
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -4648,9 +4618,10 @@
               "null"
             ],
             "maxLength": 120,
-            "description": "Rujukan bebas dari klien (mis. id pesanan); bisa dipakai menyaring GET /messages"
+            "description": "Rujukan bebas dari klien (mis. id pesanan); dikembalikan di `Message.client_reference`."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SendOptions": {
         "type": "object",
@@ -4660,12 +4631,36 @@
         ],
         "properties": {
           "contact": {
+            "description": "Null bila penerima belum terdaftar sebagai kontak.",
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Contact"
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "phone_number"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "phone_number": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "E.164"
+                  }
+                }
               }
             ]
           },
@@ -4677,25 +4672,28 @@
                 "endpoint",
                 "can_send",
                 "requires_template",
-                "reason"
+                "content_types",
+                "reason",
+                "reason_label",
+                "existing_conversation_id"
               ],
               "properties": {
                 "endpoint": {
-                  "$ref": "#/components/schemas/Endpoint"
+                  "$ref": "#/components/schemas/EndpointSummary"
                 },
                 "can_send": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Ada format pesan yang sah ke penerima ini lewat titik kirim ini."
                 },
                 "requires_template": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Hanya template yang sah (mis. di luar jendela 24 jam WhatsApp resmi)."
                 },
-                "window_expires_at": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "format": "date-time",
-                  "description": "Akhir jendela 24 jam WhatsApp resmi"
+                "content_types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "reason": {
                   "type": [
@@ -4703,8 +4701,22 @@
                     "null"
                   ],
                   "examples": [
+                    "requires_template",
                     "awaiting_customer",
-                    "contact_opted_out"
+                    "contact_opted_out",
+                    "endpoint_not_ready"
+                  ]
+                },
+                "reason_label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "existing_conversation_id": {
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               }
@@ -4726,10 +4738,7 @@
           "error",
           "client_reference",
           "created_at",
-          "sent_at",
-          "delivered_at",
-          "read_at",
-          "failed_at"
+          "timestamp"
         ],
         "properties": {
           "id": {
@@ -4739,10 +4748,16 @@
             "type": "string"
           },
           "contact_id": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "endpoint_id": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "channel": {
             "$ref": "#/components/schemas/ChannelName"
@@ -4756,7 +4771,7 @@
           },
           "content": {
             "type": "object",
-            "description": "Bentuk sama dengan Content; untuk template berisi ringkasan (template_id, name, language)."
+            "description": "Bentuk sama dengan `Content`. Template diringkas: `template_id`, `name`, `language`, `category`, `preview`. Jenis lain (lokasi, interaktif, …) dikirim apa adanya di bawah kuncinya."
           },
           "status": {
             "$ref": "#/components/schemas/MessageStatus"
@@ -4789,33 +4804,13 @@
             "type": "string",
             "format": "date-time"
           },
-          "sent_at": {
+          "timestamp": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time"
-          },
-          "delivered_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "read_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "failed_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Waktu perubahan status terakhir yang tercatat."
           }
         }
       },
@@ -4912,7 +4907,7 @@
       },
       "CreateContactInput": {
         "type": "object",
-        "description": "Data kontak baru untuk `create_contact`; semua opsional.",
+        "description": "Data kontak baru untuk `create_contact`; semua opsional. Field lain ditolak `invalid_contact_draft`.",
         "properties": {
           "name": {
             "type": [
@@ -4944,6 +4939,10 @@
             "type": [
               "string",
               "null"
+            ],
+            "examples": [
+              "lead",
+              "customer"
             ]
           },
           "locale": {
@@ -4957,12 +4956,9 @@
               "string",
               "null"
             ]
-          },
-          "custom_fields": {
-            "type": "object",
-            "additionalProperties": true
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ContactPatch": {
         "type": "object",
@@ -6027,6 +6023,45 @@
           "data": {
             "description": "Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment).",
             "type": "object"
+          }
+        }
+      },
+      "EndpointSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "channel",
+          "transport",
+          "label",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelName"
+          },
+          "transport": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "official",
+              "unofficial"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready",
+              "disconnected"
+            ]
           }
         }
       }

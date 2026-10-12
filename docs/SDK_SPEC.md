@@ -88,7 +88,6 @@ Method names are `camelCase` in Node and PHP, and `snake_case` in Python. Inputs
 | `messages` | `sendOptions(recipient)` | `GET /messages/send-options` | `messages:read` |
 | | `send(input, idempotencyKey?)` → 202 | `POST /messages` | `messages:write` |
 | | `get(messageId)` | `GET /messages/{message_id}` | `messages:read` |
-| | `list(params)` → Page | `GET /messages` | `messages:read` |
 | `contacts` | `list(params)` → Page | `GET /contacts` | `contacts:read` |
 | | `lookup(by)` | `GET /contacts/lookup` | |
 | | `create(contact, idempotencyKey?)` | `POST /contacts` | `contacts:write` |
@@ -126,7 +125,7 @@ Method names are `camelCase` in Node and PHP, and `snake_case` in Python. Inputs
 
 `Content.text(body, previewUrl=false)`,
 `Content.image|video|document|media(type, url, caption?, fileName?, mimeType?)`, and
-`Content.template(templateId).dynamic(param, placeholder).custom(param, value).headerMedia(url)`
+`Content.template(templateId).dynamic(param, placeholder).custom(param, value).location(lat, lng, name?, address?)`
 produce these shapes:
 
 ```json
@@ -134,6 +133,9 @@ produce these shapes:
 { "type": "image", "media": { "url": "https://…", "caption": null, "file_name": null, "mime_type": null } }
 { "type": "template", "template": { "template_id": "…", "variables": [ { "param": "name", "type": "dynamic", "value": "{{full_name}}" } ] } }
 ```
+
+`location` is only for templates with a LOCATION header; media headers always use the approved template's media.
+The cross-conversation message list (`GET /messages`) is not part of v3.0, so SDKs do not expose `messages.list` yet.
 
 Setting the same `param` twice replaces the earlier value.
 

@@ -32,13 +32,13 @@ final class ContentTest extends TestCase
 
     public function testTemplateVariablesAreUniquePerParam(): void
     {
-        $content = Content::template('tpl')->dynamic('name', '{{full_name}}')->custom('order', 'INV-1')->custom('name', 'Budi')->headerMedia('https://x/h.jpg');
+        $content = Content::template('tpl')->dynamic('name', '{{full_name}}')->custom('order', 'INV-1')->custom('name', 'Budi')->location(-6.2, 106.8, 'Toko');
         self::assertSame([
             'type' => 'template',
             'template' => [
                 'template_id' => 'tpl',
                 'variables' => [['param' => 'name', 'type' => 'custom', 'value' => 'Budi'], ['param' => 'order', 'type' => 'custom', 'value' => 'INV-1']],
-                'header_media' => ['url' => 'https://x/h.jpg', 'file_name' => null],
+                'location' => ['latitude' => -6.2, 'longitude' => 106.8, 'name' => 'Toko', 'address' => null],
             ],
         ], $content->toArray());
         self::assertSame(json_encode($content->toArray()), json_encode($content));

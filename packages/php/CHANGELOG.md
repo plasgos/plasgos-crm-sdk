@@ -21,6 +21,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   `retryAfter`.
 - `ClientConfig::$maxRetryWait`, and the `sleeper` and `clock` test hooks.
 
+### Aligned with the server (API v3 phase V2)
+- `TemplateContent::location()` for templates with a LOCATION header. There is no header-media
+  override: media headers always use the approved template's media.
+- `messages->sendOptions()` accepts `endpoint_id` (Instagram/Messenger identities).
+- `messages->list()` is not part of v3.0; it returns when the server ships `GET /messages`.
+- Message objects carry `status` + `timestamp`; there are no per-status timestamps in v3.0.
+
 ### Changed (breaking)
 - The v1 client is renamed to `LegacyClient`, and its types moved to `Plasgos\CrmSdk\Legacy\*`.
   See UPGRADING.md.
