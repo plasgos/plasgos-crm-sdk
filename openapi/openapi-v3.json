@@ -966,7 +966,7 @@
           {
             "name": "search",
             "in": "query",
-            "description": "Nama, nomor, atau email",
+            "description": "Nama, nomor, email, atau perusahaan (maks. 100 karakter).",
             "schema": {
               "type": "string"
             }
@@ -983,7 +983,8 @@
             "in": "query",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Satu tag."
           },
           {
             "name": "updated_from",
@@ -991,7 +992,8 @@
             "schema": {
               "type": "string",
               "format": "date-time"
-            }
+            },
+            "description": "Hanya kontak yang berubah sejak waktu ini (ISO 8601). Urutan menjadi `updated_at` naik — untuk sinkron bertahap; tanpa parameter ini urutannya terbaru dibuat."
           },
           {
             "$ref": "#/components/parameters/Page"
@@ -1083,6 +1085,9 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
           }
         }
       },
@@ -1092,7 +1097,7 @@
         ],
         "operationId": "createContact",
         "summary": "Buat kontak",
-        "description": "Nomor/email yang sudah dipakai kontak lain → `409 contact_exists` dengan `error.details.contact_id`.",
+        "description": "Buat saja. Nomor/email yang sudah dipakai kontak lain → `409 identity_taken` dengan `error.details.contact_id`. Tanpa `phone_number`, kontak dicocokkan per email.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1164,6 +1169,9 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -1175,7 +1183,7 @@
         ],
         "operationId": "upsertContact",
         "summary": "Buat atau perbarui kontak berdasarkan nomor/email",
-        "description": "`201` bila dibuat, `200` bila diperbarui. Hanya field yang dikirim yang diubah;\n`tags` dan `group_ids` DITAMBAHKAN, bukan menimpa.\n",
+        "description": "`201` bila dibuat, `200` bila diperbarui. Hanya field yang dikirim yang diubah;\n`tags` dan `group_ids` DITAMBAHKAN, bukan menimpa; `custom_fields` digabung per kunci (`null` menghapus kunci itu).\nUpsert serentak untuk nomor/email yang sama menghasilkan satu kontak. Email disimpan huruf kecil.\nNomor milik kontak yang sudah digabung memperbarui kontak tujuannya.\nGalat: `identity_taken` (409, nomor/email dipakai kontak lain, `details.contact_id`), `group_not_found` (404),\n`invalid_contact_draft` / `invalid_phone_number` / `invalid_custom_field` (422), `contact_limit_reached` (403).\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1290,6 +1298,12 @@
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         }
       }
@@ -1301,7 +1315,7 @@
         ],
         "operationId": "lookupContact",
         "summary": "Cari tepat satu kontak",
-        "description": "Sebut tepat satu cara — `phone_number`, `email`, atau `channel` + `external_id`. Tak ditemukan → `404 contact_not_found`.",
+        "description": "Sebut tepat satu cara — `phone_number`, `email`, atau `channel` + `external_id` (selain itu `422 lookup_invalid`). Kontak hasil gabung diikuti ke tujuannya. Tak ditemukan → `404 contact_not_found`.",
         "parameters": [
           {
             "name": "phone_number",
@@ -1331,6 +1345,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "endpoint_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Akun tempat identitas Instagram/Messenger dikenal (bersama `channel` + `external_id`)."
           }
         ],
         "responses": {
@@ -1364,6 +1386,33 @@
                       "properties": {
                         "data": {
                           "$ref": "#/components/schemas/Contact"
+                        },
+                        "meta": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Meta"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "redirected_from": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "description": "Id kontak sumber gabungan yang diminta, bila kontak itu sudah digabung ke kontak ini."
+                                },
+                                "matched_by": {
+                                  "type": "string",
+                                  "enum": [
+                                    "phone_number",
+                                    "email",
+                                    "identity"
+                                  ]
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
                     }
@@ -1433,6 +1482,25 @@
                       "properties": {
                         "data": {
                           "$ref": "#/components/schemas/Contact"
+                        },
+                        "meta": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Meta"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "redirected_from": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "description": "Id kontak sumber gabungan yang diminta, bila kontak itu sudah digabung ke kontak ini."
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
                     }
@@ -1513,6 +1581,25 @@
                       "properties": {
                         "data": {
                           "$ref": "#/components/schemas/Contact"
+                        },
+                        "meta": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Meta"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "redirected_from": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "description": "Id kontak sumber gabungan yang diminta, bila kontak itu sudah digabung ke kontak ini."
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
                     }
@@ -1542,7 +1629,8 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           }
-        }
+        },
+        "description": "Kontak sumber gabungan diikuti ke tujuannya. Galat: `contact_not_found` (404), `identity_taken` (409), `group_not_found` (404), `invalid_contact_draft`/`invalid_phone_number`/`invalid_custom_field` (422)."
       }
     },
     "/contact-groups": {
@@ -1679,7 +1767,8 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           }
-        }
+        },
+        "description": "Pipeline lead beserta stage berurutan (`kind` open/won/lost). Pipeline bawaan DIBUAT bila tenant belum punya — sama dengan dashboard."
       }
     },
     "/leads": {
@@ -1689,7 +1778,7 @@
         ],
         "operationId": "createLead",
         "summary": "Buat lead untuk kontak",
-        "description": "`201` lead baru; `200` + `data.created = false` bila kontak sudah punya lead aktif di pipeline itu.\nSebut kontak dengan `contact_id` ATAU `contact` (di-upsert berdasarkan nomor).\n",
+        "description": "Aturan: **1 lead AKTIF per kontak di semua pipeline**; pelanggan yang lead-nya lost/converted menjadi lead baru.\n`201` lead baru; `200` + `meta.created = false` bila kontak sudah punya lead aktif (lead itu dikembalikan apa adanya, tak diubah).\nSebut kontak dengan `contact_id` (kontak gabungan diikuti ke tujuannya) ATAU `contact`.\nGalat: `pipeline_not_found`, `stage_not_found`, `contact_not_found` (404); galat kontak dari `contact` sama dengan upsert kontak.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1866,7 +1955,8 @@
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           }
-        }
+        },
+        "description": "Galat: `lead_not_found` (404)."
       }
     },
     "/broadcasts": {
@@ -3849,7 +3939,7 @@
               "endpoint_not_found",
               "requires_template",
               "template_variables_missing",
-              "contact_exists",
+              "identity_taken",
               "rate_limited"
             ]
           },
@@ -4851,7 +4941,8 @@
               "string",
               "null"
             ],
-            "format": "email"
+            "format": "email",
+            "description": "Disimpan huruf kecil"
           },
           "company_name": {
             "type": [
@@ -4901,9 +4992,11 @@
           },
           "custom_fields": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Digabung per kunci; nilai null menghapus kunci. Kunci yang punya definisi field kustom divalidasi tipenya (`invalid_custom_field`)."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateContactInput": {
         "type": "object",
@@ -4970,10 +5063,8 @@
             ]
           },
           "phone_number": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "description": "Dinormalisasi; nomor milik kontak lain → `identity_taken`"
           },
           "email": {
             "type": [
@@ -5004,8 +5095,22 @@
           },
           "group_ids": {
             "$ref": "#/components/schemas/AddRemove"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
-        }
+        },
+        "additionalProperties": false,
+        "description": "Hanya field yang dikirim yang diubah. `tags` & `group_ids` berbentuk `{add, remove}` (tak pernah menimpa seluruh daftar)."
       },
       "AddRemove": {
         "type": "object",
@@ -5038,7 +5143,9 @@
           "custom_fields",
           "source",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "locale",
+          "timezone"
         ],
         "properties": {
           "id": {
@@ -5096,7 +5203,8 @@
             "examples": [
               "integration",
               "manual",
-              "whatsapp"
+              "whatsapp",
+              "import"
             ]
           },
           "created_at": {
@@ -5106,6 +5214,18 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -5137,6 +5257,13 @@
                           "created",
                           "updated"
                         ]
+                      },
+                      "redirected_from": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Id kontak sumber gabungan yang diminta, bila kontak itu sudah digabung ke kontak ini."
                       }
                     }
                   }
@@ -5238,7 +5365,8 @@
             "type": "string"
           },
           "contact": {
-            "$ref": "#/components/schemas/ContactInput"
+            "$ref": "#/components/schemas/ContactInput",
+            "description": "Di-upsert per nomor (atau email bila tanpa nomor) — aturan sama dengan `POST /contacts/upsert`."
           },
           "pipeline_id": {
             "type": "string"
@@ -5269,7 +5397,8 @@
               "string",
               "null"
             ],
-            "maxLength": 2000
+            "maxLength": 2000,
+            "description": "Catatan pertama lead."
           },
           "source_detail": {
             "type": [
@@ -5278,12 +5407,9 @@
             ],
             "maxLength": 120,
             "description": "Asal lead, mis. wordpress:cf7:12"
-          },
-          "custom_fields": {
-            "type": "object",
-            "additionalProperties": true
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Lead": {
         "type": "object",
@@ -5376,17 +5502,25 @@
             "type": "object",
             "properties": {
               "data": {
+                "$ref": "#/components/schemas/Lead"
+              },
+              "meta": {
                 "allOf": [
                   {
-                    "$ref": "#/components/schemas/Lead"
+                    "$ref": "#/components/schemas/Meta"
                   },
                   {
                     "type": "object",
                     "required": [
-                      "created"
+                      "created",
+                      "contact_created"
                     ],
                     "properties": {
                       "created": {
+                        "type": "boolean",
+                        "description": "false = kontak sudah punya lead aktif; lead itu dikembalikan apa adanya"
+                      },
+                      "contact_created": {
                         "type": "boolean"
                       }
                     }

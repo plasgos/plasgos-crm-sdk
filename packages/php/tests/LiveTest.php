@@ -72,6 +72,44 @@ final class LiveTest extends TestCase
         }
     }
 
+    /** V3 — read paths + validation only; skipped when the key lacks contacts/leads scopes. */
+    public function testContactsAndLeadsReadPaths(): void
+    {
+        $client = new Client((string) getenv('PLASGOS_LIVE_API_KEY'), (string) getenv('PLASGOS_LIVE_SECRET_KEY'), $this->config());
+        $scopes = $client->me->get()->data['scopes'] ?? [];
+        if (! in_array('contacts:read', $scopes, true) || ! in_array('leads:read', $scopes, true)) {
+            self::markTestSkipped('key has no contacts:read / leads:read scope');
+        }
+
+        $pipelines = $client->pipelines->list();
+        foreach ($pipelines->data as $pipeline) {
+            foreach ($pipeline['stages'] as $stage) {
+                self::assertContains($stage['kind'], ['open', 'won', 'lost']);
+            }
+        }
+        $contacts = $client->contacts->list(['per_page' => 1, 'updated_from' => '2026-01-01T00:00:00Z']);
+        self::assertArrayHasKey('total', $contacts->pagination);
+
+        try {
+            $client->contacts->lookup(['email' => 'sdk-live-test-missing@contoh.invalid']);
+            self::fail('expected NotFoundException');
+        } catch (NotFoundException $e) {
+            self::assertSame('contact_not_found', $e->errorCode);
+        }
+        try {
+            $client->leads->get('66f1dddddddddddddddddd99');
+            self::fail('expected NotFoundException');
+        } catch (NotFoundException $e) {
+            self::assertSame('lead_not_found', $e->errorCode);
+        }
+        try {
+            $client->contacts->create(['name' => 'Tanpa nomor']);
+            self::fail('expected ValidationException');
+        } catch (ValidationException $e) {
+            self::assertSame('validation_failed', $e->errorCode);
+        }
+    }
+
     public function testWrongSecretIsRejected(): void
     {
         $client = new Client((string) getenv('PLASGOS_LIVE_API_KEY'), 'plg_wrong', $this->config());

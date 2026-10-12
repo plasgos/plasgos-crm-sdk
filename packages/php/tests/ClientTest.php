@@ -204,7 +204,7 @@ final class ClientTest extends TestCase
         yield 'scope' => [403, 'scope_missing', 'permission_error', PermissionException::class];
         yield 'plan' => [403, 'not_entitled', 'permission_error', PlanException::class];
         yield 'not found' => [404, 'contact_not_found', 'not_found', NotFoundException::class];
-        yield 'conflict' => [409, 'contact_exists', 'conflict', ConflictException::class];
+        yield 'conflict' => [409, 'identity_taken', 'conflict', ConflictException::class];
         yield 'validation' => [422, 'validation_failed', 'invalid_request', ValidationException::class];
         yield 'channel' => [502, 'channel_provider_error', 'channel_error', ChannelException::class];
         yield 'unavailable' => [503, 'channel_unavailable', 'service_unavailable', ServiceUnavailableException::class];

@@ -10,8 +10,9 @@ use Plasgos\CrmSdk\Response;
 final class Leads extends AbstractResource
 {
     /**
-     * 201 new lead; 200 with `data['created'] === false` when the contact already has an open lead
-     * in that pipeline.
+     * 201 new lead; 200 with `meta['created'] === false` when the contact already has an ACTIVE lead
+     * (one active lead per contact across all pipelines) — that lead is returned unchanged.
+     * Unknown ids → NotFoundException `pipeline_not_found` | `stage_not_found` | `contact_not_found`.
      *
      * @param array<string, mixed> $lead `contact_id` OR `contact`, `pipeline_id`, `stage_id`?, …
      */

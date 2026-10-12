@@ -110,7 +110,7 @@ PlasgosApiException
 ├─ PermissionException                403 (scope_missing, api_key_revoked, …)
 │  └─ PlanException                   403 not_entitled
 ├─ NotFoundException                  404
-├─ ConflictException                  409 (idempotency_in_progress, contact_exists, …)
+├─ ConflictException                  409 (idempotency_in_progress, identity_taken, …)
 ├─ BadRequestException                400
 ├─ ValidationException                422 / 400 with fields  → ->fields
 ├─ RateLimitException                 429 → ->retryAfter (rate_limited | daily_quota_exceeded)

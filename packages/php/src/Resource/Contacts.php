@@ -17,9 +17,11 @@ final class Contacts extends AbstractResource
     }
 
     /**
-     * Exactly one of: phone_number, email, or channel + external_id. Not found → NotFoundException.
+     * Exactly one of: phone_number, email, or channel + external_id (+ endpoint_id for Instagram/Messenger).
+     * Not found → NotFoundException. `meta['matched_by']`; merged contacts resolve to their target
+     * (`meta['redirected_from']`).
      *
-     * @param array{phone_number?: string, email?: string, channel?: string, external_id?: string} $by
+     * @param array{phone_number?: string, email?: string, channel?: string, external_id?: string, endpoint_id?: string} $by
      */
     public function lookup(array $by): Response
     {
@@ -27,7 +29,7 @@ final class Contacts extends AbstractResource
     }
 
     /**
-     * Existing phone/email → ConflictException `contact_exists` (see ->details['contact_id']).
+     * Existing phone/email → ConflictException `identity_taken` (see ->details['contact_id']).
      *
      * @param array<string, mixed> $contact
      */
@@ -47,6 +49,7 @@ final class Contacts extends AbstractResource
         return $this->http->request('POST', '/contacts/upsert', body: $contact, idempotencyKey: $idempotencyKey);
     }
 
+    /** A merged (source) contact id returns the target contact with `meta['redirected_from']`. */
     public function get(string $contactId): Response
     {
         return $this->http->request('GET', self::path('contacts', $contactId));

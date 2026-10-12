@@ -28,6 +28,12 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - `messages->list()` is not part of v3.0; it returns when the server ships `GET /messages`.
 - Message objects carry `status` + `timestamp`; there are no per-status timestamps in v3.0.
 
+### Aligned with the server (API v3 phase V3)
+- Duplicate phone/email is `identity_taken` (409, `details['contact_id']`), not `contact_exists`.
+- `contacts->lookup()` accepts `endpoint_id`; merged contacts resolve to their target (`meta['redirected_from']`).
+- `leads->create()`: whether a lead was created is `meta['created']` (plus `meta['contact_created']`);
+  `data` is always the lead. One active lead per contact across all pipelines.
+
 ### Changed (breaking)
 - The v1 client is renamed to `LegacyClient`, and its types moved to `Plasgos\CrmSdk\Legacy\*`.
   See UPGRADING.md.
