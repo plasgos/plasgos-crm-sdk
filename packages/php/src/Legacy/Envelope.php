@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk;
+namespace Plasgos\CrmSdk\Legacy;
 
 /**
  * Normalised response wrapper returned by every successful SDK call.

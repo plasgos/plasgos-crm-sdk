@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk\Http;
+namespace Plasgos\CrmSdk\Legacy\Http;
 
-use Plasgos\CrmSdk\Envelope;
+use Plasgos\CrmSdk\Legacy\Envelope;
 use Plasgos\CrmSdk\Exception\ExceptionFactory;
 use Plasgos\CrmSdk\Exception\PlasgosApiException;
 use Plasgos\CrmSdk\Exception\RateLimitException;

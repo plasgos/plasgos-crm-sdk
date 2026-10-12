@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Plasgos\CrmSdk;
 
 use Plasgos\CrmSdk\Http\Transport;
-use Plasgos\CrmSdk\Resource\Credentials;
+use Plasgos\CrmSdk\Legacy\Resource\Credentials;
 
 /**
  * Client for the credential-management endpoints (`/v2/integration/*`).
@@ -13,7 +13,7 @@ use Plasgos\CrmSdk\Resource\Credentials;
  * These use the CRM user-session auth, not signed API auth:
  * `Authorization: Bearer <accessToken>` + `fingerprint: <fingerprint>`.
  * Pass the exact token string your CRM session issued — the SDK does not
- * encrypt or refresh it.
+ * encrypt or refresh it. Responses use the v1-style {@see Legacy\Envelope}.
  *
  * ```php
  * $creds = new \Plasgos\CrmSdk\CredentialsClient($accessToken, $fingerprint);
@@ -39,7 +39,7 @@ final class CredentialsClient
 
         $config ??= new ClientConfig();
 
-        $http = Transport::fromConfig($config, fn (): array => [
+        $http = Transport::legacy($config, fn (): array => [
             'Authorization' => 'Bearer ' . $this->accessToken,
             'fingerprint' => $this->fingerprint,
         ]);

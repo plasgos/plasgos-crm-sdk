@@ -1,0 +1,6035 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Plasgos CRM Integration API",
+    "version": "3.0.0-draft.1",
+    "summary": "API publik Plasgos CRM untuk pihak ketiga (WordPress, SDK, sistem klien).",
+    "description": "**Status: USULAN (draft).** Rancangan lengkap: `docs/02-rancangan-api-integrasi-v3.md`.\n\n## Autentikasi\nSetiap permintaan (kecuali `GET /openapi.json`) membawa tiga header:\n\n| Header | Isi |\n|---|---|\n| `Plasgos-Api-Key` | api key (64 hex) |\n| `Plasgos-Timestamp` | detik Unix |\n| `Plasgos-Signature` | `v1=` + hex(HMAC-SHA256(secret, string_to_sign)) |\n\n```\nstring_to_sign = timestamp + \"\\n\" + METHOD + \"\\n\" + request_target + \"\\n\" + hex(sha256(raw_body))\n```\n`request_target` = path + query persis seperti dikirim (mis. `/api/v3/contacts?page=2`).\nTanpa body → sha256 dari string kosong. Selisih waktu > 300 detik → `401 signature_expired`.\n\n## Bentuk respons\nSukses: `{ success: true, message, data, meta }`. Galat: `{ success: false, message, error, meta }`.\nProgram bercabang dari `error.code`, bukan dari `message`. Klien WAJIB mengabaikan field yang\ntidak dikenal (respons hanya bertambah dalam v3).\n\n## Idempotensi\n`POST` pembuat/pengirim menerima `Idempotency-Key` (disimpan 24 jam per kunci API).\n",
+    "contact": {
+      "name": "Plasgos",
+      "url": "https://plasgos.co.id"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://wa-client.plasgos.co.id/api/v3",
+      "description": "Production"
+    },
+    {
+      "url": "https://api-crm.sandbox.plasgos.co.id/api/v3",
+      "description": "Sandbox"
+    }
+  ],
+  "security": [
+    {
+      "PlasgosSignature": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Akun"
+    },
+    {
+      "name": "Channel",
+      "description": "Channel, titik kirim (endpoint), template WhatsApp, variabel global."
+    },
+    {
+      "name": "Pesan",
+      "description": "Kirim pesan omnichannel satu-satu."
+    },
+    {
+      "name": "Kontak"
+    },
+    {
+      "name": "Lead"
+    },
+    {
+      "name": "Broadcast"
+    },
+    {
+      "name": "Followup"
+    },
+    {
+      "name": "Webhook"
+    }
+  ],
+  "paths": {
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "Akun"
+        ],
+        "operationId": "getOpenApiSpec",
+        "summary": "Spesifikasi OpenAPI ini",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Dokumen OpenAPI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "Akun"
+        ],
+        "operationId": "getMe",
+        "summary": "Info kunci API, tenant, scope, dan kuota",
+        "description": "Dipakai tombol \"Uji Koneksi\". Scope `account:read` selalu dimiliki kunci aktif.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Me"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Koneksi berhasil",
+                  "data": {
+                    "tenant": {
+                      "id": "1024",
+                      "name": "Toko Contoh"
+                    },
+                    "api_key": {
+                      "prefix": "3f9a1c",
+                      "status": "active",
+                      "approved_at": "2026-09-01T02:00:00Z"
+                    },
+                    "scopes": [
+                      "account:read",
+                      "channels:read",
+                      "messages:write",
+                      "contacts:write",
+                      "leads:write"
+                    ],
+                    "quota": {
+                      "daily_limit": 10000,
+                      "used_today": 132,
+                      "resets_at": "2026-10-09T17:00:00Z",
+                      "per_minute_limit": 120
+                    },
+                    "webhooks": {
+                      "count": 1
+                    }
+                  },
+                  "meta": {
+                    "request_id": "req_01JA2Z7K3M9Q4X8T"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/channels": {
+      "get": {
+        "tags": [
+          "Channel"
+        ],
+        "operationId": "listChannels",
+        "summary": "Channel yang dikenal sistem dan hak paket tenant",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Channel"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/endpoints": {
+      "get": {
+        "tags": [
+          "Channel"
+        ],
+        "operationId": "listEndpoints",
+        "summary": "Titik kirim milik tenant (semua channel)",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ChannelName"
+            }
+          },
+          {
+            "name": "transport",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Transport"
+            }
+          },
+          {
+            "name": "ready",
+            "in": "query",
+            "description": "Hanya yang siap mengirim",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Endpoint"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/endpoints/{endpoint_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/EndpointId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Channel"
+        ],
+        "operationId": "getEndpoint",
+        "summary": "Detail titik kirim",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Endpoint"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/endpoints/{endpoint_id}/templates": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/EndpointId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Channel"
+        ],
+        "operationId": "listEndpointTemplates",
+        "summary": "Template WhatsApp yang disetujui untuk titik kirim WABA",
+        "description": "Titik kirim selain WhatsApp resmi menjawab daftar kosong.",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "marketing",
+                "utility",
+                "authentication"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Template"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/template-variables": {
+      "get": {
+        "tags": [
+          "Channel"
+        ],
+        "operationId": "listTemplateVariables",
+        "summary": "Variabel global untuk isian template bertipe `dynamic`",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TemplateVariable"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Daftar variabel global",
+                  "data": [
+                    {
+                      "key": "full_name",
+                      "placeholder": "{{full_name}}",
+                      "label": "Nama lengkap kontak",
+                      "example": "Budi Santoso"
+                    },
+                    {
+                      "key": "format_date_4",
+                      "placeholder": "{{format_date_4}}",
+                      "label": "Tanggal hari ini",
+                      "example": "09 Oktober 2026"
+                    }
+                  ],
+                  "meta": {
+                    "request_id": "req_01JA2Z7K3M9Q4X8T"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/messages/send-options": {
+      "get": {
+        "tags": [
+          "Pesan"
+        ],
+        "operationId": "getMessageSendOptions",
+        "summary": "Titik kirim yang bisa dipakai ke penerima dan format yang wajib",
+        "description": "Penerima disebut dengan TEPAT SATU cara — `contact_id`, `phone_number`, atau `channel` + `external_id`.",
+        "parameters": [
+          {
+            "name": "contact_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_number",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "example": "081234567890"
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ChannelName"
+            }
+          },
+          {
+            "name": "external_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SendOptions"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/messages": {
+      "get": {
+        "tags": [
+          "Pesan"
+        ],
+        "operationId": "listMessages",
+        "summary": "Riwayat pesan yang dikirim lewat API",
+        "parameters": [
+          {
+            "name": "contact_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endpoint_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MessageStatus"
+            }
+          },
+          {
+            "name": "client_reference",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Message"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pesan"
+        ],
+        "operationId": "sendMessage",
+        "summary": "Kirim satu pesan ke satu penerima (omnichannel)",
+        "description": "Memakai ulang percakapan yang ada dengan penerima itu di titik kirim yang sama.\nDijawab **202**; status akhir lewat `GET /messages/{id}` atau webhook `message.status_updated`.\nPesan yang tersimpan tetapi ditolak penyedia tetap 202 dengan `data.status = failed` dan `data.error`.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              },
+              "examples": {
+                "template_whatsapp": {
+                  "summary": "Template WhatsApp resmi ke nomor (buat kontak bila belum ada)",
+                  "value": {
+                    "endpoint_id": "6281100000001",
+                    "recipient": {
+                      "phone_number": "081234567890"
+                    },
+                    "create_contact": {
+                      "name": "Budi Santoso",
+                      "email": "budi@contoh.id",
+                      "tags": [
+                        "woocommerce"
+                      ]
+                    },
+                    "content": {
+                      "type": "template",
+                      "template": {
+                        "template_id": "66f1a2b3c4d5e6f708192a3b",
+                        "variables": [
+                          {
+                            "param": "name",
+                            "type": "dynamic",
+                            "value": "{{full_name}}"
+                          },
+                          {
+                            "param": "order",
+                            "type": "custom",
+                            "value": "INV-2026-0917"
+                          }
+                        ]
+                      }
+                    },
+                    "client_reference": "wc_order_1234_processing"
+                  }
+                },
+                "text_contact": {
+                  "summary": "Teks ke kontak yang ada",
+                  "value": {
+                    "endpoint_id": "6281100000001",
+                    "recipient": {
+                      "contact_id": "66f1a2b3c4d5e6f7a8b9c0d1"
+                    },
+                    "content": {
+                      "type": "text",
+                      "text": {
+                        "body": "Halo Kak Budi, pesanan Anda sudah dikirim.",
+                        "preview_url": false
+                      }
+                    }
+                  }
+                },
+                "image_instagram": {
+                  "summary": "Gambar ke Instagram (pelanggan pernah menghubungi)",
+                  "value": {
+                    "endpoint_id": "17841400000000000",
+                    "recipient": {
+                      "identity": {
+                        "channel": "instagram",
+                        "external_id": "1784…"
+                      }
+                    },
+                    "content": {
+                      "type": "image",
+                      "media": {
+                        "url": "https://toko.contoh.id/promo.jpg",
+                        "caption": "Promo minggu ini"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Diterima untuk dikirim",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Message"
+                        },
+                        "meta": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Meta"
+                            },
+                            {
+                              "properties": {
+                                "conversation_created": {
+                                  "type": "boolean"
+                                },
+                                "contact_created": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Pesan masuk antrean kirim",
+                  "data": {
+                    "id": "msg_01JA2ZC4",
+                    "conversation_id": "cv_01J8ZB",
+                    "contact_id": "66f1a2b3c4d5e6f7a8b9c0d1",
+                    "endpoint_id": "6281100000001",
+                    "channel": "whatsapp",
+                    "direction": "outbound",
+                    "content": {
+                      "type": "template",
+                      "template": {
+                        "template_id": "66f1a2b3c4d5e6f708192a3b",
+                        "name": "order_processing",
+                        "language": "id"
+                      }
+                    },
+                    "status": "sent",
+                    "error": null,
+                    "client_reference": "wc_order_1234_processing",
+                    "created_at": "2026-10-09T03:15:00Z",
+                    "sent_at": "2026-10-09T03:15:01Z",
+                    "delivered_at": null,
+                    "read_at": null,
+                    "failed_at": null
+                  },
+                  "meta": {
+                    "request_id": "req_01JA2Z7K3M9Q4X8T",
+                    "conversation_created": false,
+                    "contact_created": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/messages/{message_id}": {
+      "parameters": [
+        {
+          "name": "message_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Pesan"
+        ],
+        "operationId": "getMessage",
+        "summary": "Status satu pesan",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Message"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/contacts": {
+      "get": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "listContacts",
+        "summary": "Daftar kontak",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Nama, nomor, atau email",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "updated_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Contact"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Daftar kontak",
+                  "data": [
+                    {
+                      "id": "66f1a2b3c4d5e6f7a8b9c0d1",
+                      "name": "Budi Santoso",
+                      "phone_number": "+6281234567890",
+                      "email": "budi@contoh.id",
+                      "company_name": null,
+                      "tags": [
+                        "woocommerce"
+                      ],
+                      "group_ids": [],
+                      "lifecycle_stage": "lead",
+                      "custom_fields": {},
+                      "source": "integration",
+                      "created_at": "2026-10-09T03:15:00Z",
+                      "updated_at": "2026-10-09T03:15:00Z"
+                    }
+                  ],
+                  "meta": {
+                    "request_id": "req_01JA2Z7K3M9Q4X8T",
+                    "pagination": {
+                      "page": 1,
+                      "per_page": 20,
+                      "total": 1,
+                      "total_pages": 1,
+                      "has_next_page": false,
+                      "has_prev_page": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "createContact",
+        "summary": "Buat kontak",
+        "description": "Nomor/email yang sudah dipakai kontak lain → `409 contact_exists` dengan `error.details.contact_id`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dibuat",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Contact"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/contacts/upsert": {
+      "post": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "upsertContact",
+        "summary": "Buat atau perbarui kontak berdasarkan nomor/email",
+        "description": "`201` bila dibuat, `200` bila diperbarui. Hanya field yang dikirim yang diubah;\n`tags` dan `group_ids` DITAMBAHKAN, bukan menimpa.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ContactInput"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "match_on": {
+                        "type": "string",
+                        "enum": [
+                          "phone_number",
+                          "email"
+                        ],
+                        "default": "phone_number"
+                      }
+                    }
+                  }
+                ]
+              },
+              "example": {
+                "match_on": "phone_number",
+                "name": "Budi Santoso",
+                "phone_number": "081234567890",
+                "email": "budi@contoh.id",
+                "tags": [
+                  "woocommerce",
+                  "customer"
+                ],
+                "custom_fields": {
+                  "wp_user_id": "42"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Diperbarui",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactUpsertResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Dibuat",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactUpsertResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/contacts/lookup": {
+      "get": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "lookupContact",
+        "summary": "Cari tepat satu kontak",
+        "description": "Sebut tepat satu cara — `phone_number`, `email`, atau `channel` + `external_id`. Tak ditemukan → `404 contact_not_found`.",
+        "parameters": [
+          {
+            "name": "phone_number",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ChannelName"
+            }
+          },
+          {
+            "name": "external_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Contact"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/contacts/{contact_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ContactId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "getContact",
+        "summary": "Detail kontak",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Contact"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "updateContact",
+        "summary": "Ubah sebagian kontak",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactPatch"
+              },
+              "example": {
+                "name": "Budi S.",
+                "tags": {
+                  "add": [
+                    "vip"
+                  ],
+                  "remove": [
+                    "prospek"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Contact"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/contact-groups": {
+      "get": {
+        "tags": [
+          "Kontak"
+        ],
+        "operationId": "listContactGroups",
+        "summary": "Grup kontak (sasaran broadcast)",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ContactGroup"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/pipelines": {
+      "get": {
+        "tags": [
+          "Lead"
+        ],
+        "operationId": "listPipelines",
+        "summary": "Pipeline beserta stage (baca saja)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Pipeline"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/leads": {
+      "post": {
+        "tags": [
+          "Lead"
+        ],
+        "operationId": "createLead",
+        "summary": "Buat lead untuk kontak",
+        "description": "`201` lead baru; `200` + `data.created = false` bila kontak sudah punya lead aktif di pipeline itu.\nSebut kontak dengan `contact_id` ATAU `contact` (di-upsert berdasarkan nomor).\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLeadRequest"
+              },
+              "example": {
+                "contact": {
+                  "name": "Budi Santoso",
+                  "phone_number": "081234567890",
+                  "email": "budi@contoh.id"
+                },
+                "pipeline_id": "66f2000000000000000000a1",
+                "stage_id": null,
+                "source_detail": "wordpress:cf7:12",
+                "tags": [
+                  "formulir-kontak"
+                ],
+                "note": "Tertarik paket reseller"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lead aktif yang sudah ada",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCreateResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Lead baru",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/leads/{lead_id}": {
+      "parameters": [
+        {
+          "name": "lead_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Lead"
+        ],
+        "operationId": "getLead",
+        "summary": "Detail lead",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Lead"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/broadcasts": {
+      "get": {
+        "tags": [
+          "Broadcast"
+        ],
+        "operationId": "listBroadcasts",
+        "summary": "Daftar broadcast",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/BroadcastStatus"
+            }
+          },
+          {
+            "name": "endpoint_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Broadcast"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Broadcast"
+        ],
+        "operationId": "createBroadcast",
+        "summary": "Buat broadcast",
+        "description": "Jalur dipilih dari `transport` titik kirim: WhatsApp resmi wajib `content.type = template`;\nWhatsApp tidak resmi menerima teks/media. Instagram/Messenger → `422 channel_broadcast_unsupported`.\nPenerima yang ditolak tidak menggagalkan permintaan; dilaporkan di `meta.rejected_recipients`.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBroadcastRequest"
+              },
+              "example": {
+                "name": "Promo Oktober",
+                "endpoint_id": "6281100000001",
+                "content": {
+                  "type": "template",
+                  "template": {
+                    "template_id": "66f1a2b3c4d5e6f708192a3b",
+                    "variables": [
+                      {
+                        "param": "name",
+                        "type": "dynamic",
+                        "value": "{{full_name}}"
+                      }
+                    ]
+                  }
+                },
+                "audience": {
+                  "recipients": [
+                    {
+                      "phone_number": "081234567890",
+                      "name": "Budi"
+                    },
+                    {
+                      "phone_number": "081298765432",
+                      "name": "Sari"
+                    }
+                  ]
+                },
+                "scheduled_at": "2026-10-10T09:00:00+07:00"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Diterima & dijadwalkan",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Broadcast"
+                        },
+                        "meta": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Meta"
+                            },
+                            {
+                              "properties": {
+                                "accepted_recipients": {
+                                  "type": "integer"
+                                },
+                                "rejected_recipients": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "required": [
+                                      "index",
+                                      "code",
+                                      "message"
+                                    ],
+                                    "properties": {
+                                      "index": {
+                                        "type": "integer",
+                                        "description": "Posisi di audience.recipients / contact_ids"
+                                      },
+                                      "phone_number": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "contact_id": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "code": {
+                                        "type": "string",
+                                        "examples": [
+                                          "phone_invalid",
+                                          "contact_opted_out"
+                                        ]
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/broadcasts/{broadcast_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BroadcastId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Broadcast"
+        ],
+        "operationId": "getBroadcast",
+        "summary": "Detail + ringkasan broadcast",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Broadcast"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/broadcasts/{broadcast_id}/recipients": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BroadcastId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Broadcast"
+        ],
+        "operationId": "listBroadcastRecipients",
+        "summary": "Status per penerima",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MessageStatus"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/BroadcastRecipient"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/broadcasts/{broadcast_id}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BroadcastId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Broadcast"
+        ],
+        "operationId": "cancelBroadcast",
+        "summary": "Batalkan broadcast yang belum selesai",
+        "description": "Broadcast yang sudah `completed`/`cancelled` → `409 broadcast_not_cancellable`.",
+        "responses": {
+          "200": {
+            "description": "Dibatalkan",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Broadcast"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/followups": {
+      "get": {
+        "tags": [
+          "Followup"
+        ],
+        "operationId": "listFollowups",
+        "summary": "Daftar urutan followup (isi dirancang di dashboard)",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "active",
+                "stopped"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Followup"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/followups/{followup_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FollowupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Followup"
+        ],
+        "operationId": "getFollowup",
+        "summary": "Detail followup + langkah",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Followup"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/followups/{followup_id}/enrollments": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FollowupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Followup"
+        ],
+        "operationId": "listFollowupEnrollments",
+        "summary": "Kontak yang terdaftar di followup",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EnrollmentStatus"
+            }
+          },
+          {
+            "name": "contact_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Enrollment"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Followup"
+        ],
+        "operationId": "enrollFollowup",
+        "summary": "Daftarkan kontak ke followup",
+        "description": "`201` terdaftar baru; `200` bila kontak sudah terdaftar aktif (tidak didaftarkan dua kali).\nFollowup yang tidak `active` → `409 followup_not_active`.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              },
+              "example": {
+                "contact": {
+                  "name": "Budi Santoso",
+                  "phone_number": "081234567890"
+                },
+                "start_at": null,
+                "variables": [
+                  {
+                    "param": "order",
+                    "type": "custom",
+                    "value": "INV-2026-0917"
+                  }
+                ],
+                "client_reference": "wc-order-1234-pending"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sudah terdaftar",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Enrollment"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Terdaftar",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Enrollment"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/followups/{followup_id}/enrollments/{contact_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/FollowupId"
+        },
+        {
+          "$ref": "#/components/parameters/ContactId"
+        }
+      ],
+      "delete": {
+        "tags": [
+          "Followup"
+        ],
+        "operationId": "unenrollFollowup",
+        "summary": "Hentikan followup untuk kontak",
+        "description": "Idempoten — kontak yang tidak terdaftar aktif tetap dijawab 200 dengan status terakhirnya.",
+        "responses": {
+          "200": {
+            "description": "Dihentikan",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Enrollment"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/webhooks": {
+      "get": {
+        "tags": [
+          "Webhook"
+        ],
+        "operationId": "listWebhooks",
+        "summary": "Daftar langganan webhook",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/WebhookSubscription"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "operationId": "createWebhook",
+        "summary": "Daftarkan URL webhook",
+        "description": "Maksimal 5 per tenant. Hanya `https`, bukan IP privat/localhost. `signing_secret` hanya muncul di respons ini.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookInput"
+              },
+              "example": {
+                "url": "https://toko.contoh.id/wp-json/plasgos-crm/v1/webhook",
+                "events": [
+                  "message.received",
+                  "message.status_updated",
+                  "lead.stage_changed"
+                ],
+                "description": "Situs toko.contoh.id"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dibuat",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/WebhookSubscription"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "signing_secret"
+                              ],
+                              "properties": {
+                                "signing_secret": {
+                                  "type": "string",
+                                  "examples": [
+                                    "whsec_6f1d…"
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/webhooks/{webhook_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/WebhookId"
+        }
+      ],
+      "patch": {
+        "tags": [
+          "Webhook"
+        ],
+        "operationId": "updateWebhook",
+        "summary": "Ubah langganan",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/WebhookEventType"
+                    }
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/WebhookSubscription"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Webhook"
+        ],
+        "operationId": "deleteWebhook",
+        "summary": "Hapus langganan",
+        "responses": {
+          "200": {
+            "description": "Dihapus",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "deleted": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/webhooks/{webhook_id}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/WebhookId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "operationId": "testWebhook",
+        "summary": "Kirim event `webhook.test` sekarang",
+        "responses": {
+          "200": {
+            "description": "Hasil percobaan kirim",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "delivered",
+                            "response_status",
+                            "duration_ms"
+                          ],
+                          "properties": {
+                            "delivered": {
+                              "type": "boolean"
+                            },
+                            "response_status": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "duration_ms": {
+                              "type": "integer"
+                            },
+                            "error": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/webhooks/{webhook_id}/rotate-secret": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/WebhookId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "operationId": "rotateWebhookSecret",
+        "summary": "Ganti signing secret (yang lama tetap berlaku 24 jam)",
+        "responses": {
+          "200": {
+            "description": "Secret baru",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/XRequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessEnvelope"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "signing_secret",
+                            "previous_secret_expires_at"
+                          ],
+                          "properties": {
+                            "signing_secret": {
+                              "type": "string"
+                            },
+                            "previous_secret_expires_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "event": {
+      "post": {
+        "summary": "Event yang dikirim Plasgos CRM ke URL langganan",
+        "description": "Header: `Plasgos-Webhook-Id`, `Plasgos-Webhook-Timestamp`, `Plasgos-Webhook-Signature`\n(`v1=` + hex(HMAC-SHA256(signing_secret, id + \".\" + timestamp + \".\" + raw_body))).\nBalas 2xx dalam 10 detik. Pengiriman bisa terulang — abaikan `id` yang sudah diproses.\n",
+        "parameters": [
+          {
+            "name": "Plasgos-Webhook-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Plasgos-Webhook-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Plasgos-Webhook-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^v1=[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookEvent"
+              },
+              "example": {
+                "id": "evt_01JA2ZB8N4C6",
+                "type": "message.received",
+                "api_version": "v3",
+                "created_at": "2026-10-09T03:15:00Z",
+                "data": {
+                  "id": "msg_01JA2ZD1",
+                  "conversation_id": "cv_01J8ZB",
+                  "contact_id": "66f1a2b3c4d5e6f7a8b9c0d1",
+                  "endpoint_id": "6281100000001",
+                  "channel": "whatsapp",
+                  "direction": "inbound",
+                  "content": {
+                    "type": "text",
+                    "text": {
+                      "body": "Kak, pesanan saya sudah dikirim?"
+                    }
+                  },
+                  "status": "delivered",
+                  "error": null,
+                  "client_reference": null,
+                  "created_at": "2026-10-09T03:15:00Z",
+                  "sent_at": null,
+                  "delivered_at": "2026-10-09T03:15:00Z",
+                  "read_at": null,
+                  "failed_at": null
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Diterima penerima"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "PlasgosSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Plasgos-Api-Key",
+        "description": "Kunci API + dua header pendamping wajib: `Plasgos-Timestamp` dan `Plasgos-Signature`\n(lihat bagian Autentikasi di deskripsi API). OpenAPI tidak bisa mengekspresikan HMAC\nsecara native, jadi keduanya dijelaskan di sini.\n"
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "PerPage": {
+        "name": "per_page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "String unik 8–255 karakter. Kunci sama + isi sama dalam 24 jam → respons pertama diulang.",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 255
+        }
+      },
+      "EndpointId": {
+        "name": "endpoint_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ContactId": {
+        "name": "contact_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "BroadcastId": {
+        "name": "broadcast_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "FollowupId": {
+        "name": "followup_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "WebhookId": {
+        "name": "webhook_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "headers": {
+      "XRequestId": {
+        "description": "Sama dengan `meta.request_id`.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RateLimitLimit": {
+        "description": "Batas permintaan per jendela.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimitRemaining": {
+        "description": "Sisa permintaan di jendela ini.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimitReset": {
+        "description": "Detik sampai jendela batas direset.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "IdempotentReplayed": {
+        "description": "`true` bila respons ini salinan permintaan pertama dengan Idempotency-Key yang sama.",
+        "schema": {
+          "type": "boolean"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Permintaan tidak bisa dibaca",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Body bukan JSON yang sah",
+              "error": {
+                "code": "malformed_json",
+                "type": "invalid_request",
+                "details": null,
+                "fields": [],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#malformed_json"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Kunci atau tanda tangan tidak sah",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Tanda tangan permintaan sudah kedaluwarsa. Periksa jam server Anda.",
+              "error": {
+                "code": "signature_expired",
+                "type": "authentication_error",
+                "details": {
+                  "server_time": 1791530400,
+                  "max_skew_seconds": 300
+                },
+                "fields": [],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#signature_expired"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Scope kurang, paket tidak mencakup, atau kunci dicabut",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Kunci API ini belum diberi izin mengirim pesan",
+              "error": {
+                "code": "scope_missing",
+                "type": "permission_error",
+                "details": {
+                  "required_scope": "messages:write"
+                },
+                "fields": [],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#scope_missing"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Tidak ada, atau milik tenant lain",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Akun channel ini tidak ada di akun Anda",
+              "error": {
+                "code": "endpoint_not_found",
+                "type": "not_found",
+                "details": null,
+                "fields": [],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#endpoint_not_found"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Keadaan sumber daya tidak memungkinkan",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Belum bisa dimulai — tunggu pelanggan mengirim pesan lebih dulu",
+              "error": {
+                "code": "awaiting_customer",
+                "type": "conflict",
+                "details": null,
+                "fields": [],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#awaiting_customer"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "UnprocessableEntity": {
+        "description": "Validasi isi gagal",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Ada variabel template yang belum terisi",
+              "error": {
+                "code": "template_variables_missing",
+                "type": "invalid_request",
+                "details": {
+                  "missing": [
+                    {
+                      "param": "order",
+                      "component": "body"
+                    }
+                  ]
+                },
+                "fields": [
+                  {
+                    "field": "content.template.variables",
+                    "code": "required",
+                    "message": "Variabel `order` wajib diisi"
+                  }
+                ],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#template_variables_missing"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Batas pemakaian tercapai",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "success": false,
+              "message": "Terlalu banyak permintaan. Coba lagi dalam 12 detik.",
+              "error": {
+                "code": "rate_limited",
+                "type": "rate_limit_error",
+                "details": {
+                  "limit": 120,
+                  "window_seconds": 60,
+                  "retry_after_seconds": 12
+                },
+                "fields": [],
+                "doc_url": "https://docs.plasgos.co.id/api/v3/errors#rate_limited"
+              },
+              "meta": {
+                "request_id": "req_01JA2Z7K3M9Q4X8T"
+              }
+            }
+          }
+        }
+      },
+      "BadGateway": {
+        "description": "Penyedia channel menolak/gagal",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Channel sementara tidak tersedia",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Meta": {
+        "type": "object",
+        "required": [
+          "request_id"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "examples": [
+              "req_01JA2Z7K3M9Q4X8T"
+            ]
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "required": [
+          "page",
+          "per_page",
+          "total",
+          "total_pages",
+          "has_next_page",
+          "has_prev_page"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "total_pages": {
+            "type": "integer"
+          },
+          "has_next_page": {
+            "type": "boolean"
+          },
+          "has_prev_page": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SuccessEnvelope": {
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "message": {
+            "type": "string",
+            "description": "Bahasa Indonesia, siap ditampilkan"
+          },
+          "data": {},
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        }
+      },
+      "ListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SuccessEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array"
+              },
+              "meta": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Meta"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "pagination"
+                    ],
+                    "properties": {
+                      "pagination": {
+                        "$ref": "#/components/schemas/Pagination"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "error",
+          "meta"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": false
+          },
+          "message": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "type",
+          "details",
+          "fields",
+          "doc_url"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Kode mesin yang stabil. Daftar terbuka — kode baru bisa bertambah.",
+            "examples": [
+              "signature_invalid",
+              "scope_missing",
+              "endpoint_not_found",
+              "requires_template",
+              "template_variables_missing",
+              "contact_exists",
+              "rate_limited"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "authentication_error",
+              "permission_error",
+              "not_found",
+              "conflict",
+              "rate_limit_error",
+              "api_error",
+              "channel_error",
+              "service_unavailable"
+            ]
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "code",
+                "message"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "examples": [
+                    "recipient.phone_number"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "examples": [
+                    "required",
+                    "invalid_format",
+                    "too_long"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "doc_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "required": [
+          "tenant",
+          "api_key",
+          "scopes",
+          "quota",
+          "webhooks"
+        ],
+        "properties": {
+          "tenant": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "api_key": {
+            "type": "object",
+            "required": [
+              "prefix",
+              "status"
+            ],
+            "properties": {
+              "prefix": {
+                "type": "string",
+                "description": "6 karakter awal untuk identifikasi"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "active"
+                ]
+              },
+              "approved_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            }
+          },
+          "quota": {
+            "type": "object",
+            "required": [
+              "daily_limit",
+              "used_today",
+              "resets_at",
+              "per_minute_limit"
+            ],
+            "properties": {
+              "daily_limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "null = tak terbatas"
+              },
+              "used_today": {
+                "type": "integer"
+              },
+              "resets_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "per_minute_limit": {
+                "type": "integer"
+              }
+            }
+          },
+          "webhooks": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Scope": {
+        "type": "string",
+        "enum": [
+          "account:read",
+          "channels:read",
+          "messages:read",
+          "messages:write",
+          "contacts:read",
+          "contacts:write",
+          "leads:read",
+          "leads:write",
+          "broadcasts:read",
+          "broadcasts:write",
+          "followups:read",
+          "followups:write",
+          "webhooks:manage"
+        ]
+      },
+      "ChannelName": {
+        "type": "string",
+        "description": "Daftar terbuka; channel baru bisa bertambah.",
+        "enum": [
+          "whatsapp",
+          "instagram",
+          "messenger"
+        ]
+      },
+      "Transport": {
+        "type": "string",
+        "description": "`official` = WhatsApp Business Platform / Meta Graph; `unofficial` = WhatsApp Web (perangkat tersambung).",
+        "enum": [
+          "official",
+          "unofficial"
+        ]
+      },
+      "Channel": {
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "transports",
+          "entitled"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/ChannelName"
+          },
+          "label": {
+            "type": "string",
+            "examples": [
+              "WhatsApp"
+            ]
+          },
+          "transports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transport"
+            }
+          },
+          "entitled": {
+            "type": "boolean",
+            "description": "Termasuk paket langganan tenant"
+          }
+        }
+      },
+      "Endpoint": {
+        "type": "object",
+        "required": [
+          "id",
+          "channel",
+          "transport",
+          "label",
+          "address",
+          "status",
+          "capabilities"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "endpoint_id"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelName"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/Transport"
+          },
+          "label": {
+            "type": "string",
+            "examples": [
+              "CS Toko"
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nomor E.164 atau nama akun",
+            "examples": [
+              "+6281100000001"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready",
+              "disconnected"
+            ]
+          },
+          "capabilities": {
+            "type": "object",
+            "required": [
+              "can_initiate",
+              "requires_template_outside_window",
+              "content_types",
+              "broadcast"
+            ],
+            "properties": {
+              "can_initiate": {
+                "type": "boolean",
+                "description": "Bisnis boleh memulai percakapan"
+              },
+              "requires_template_outside_window": {
+                "type": "boolean"
+              },
+              "content_types": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ContentType"
+                }
+              },
+              "broadcast": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Template": {
+        "type": "object",
+        "required": [
+          "id",
+          "meta_template_id",
+          "name",
+          "language",
+          "category",
+          "status",
+          "parameters",
+          "header"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Dipakai sebagai content.template.template_id"
+          },
+          "meta_template_id": {
+            "type": "string",
+            "description": "Id Meta; juga diterima sebagai template_id"
+          },
+          "name": {
+            "type": "string",
+            "examples": [
+              "order_processing"
+            ]
+          },
+          "language": {
+            "type": "string",
+            "examples": [
+              "id"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "marketing",
+              "utility",
+              "authentication"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved"
+            ]
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Teks body dengan placeholder"
+          },
+          "parameters": {
+            "type": "array",
+            "description": "Variabel yang wajib dipetakan di `variables`",
+            "items": {
+              "type": "object",
+              "required": [
+                "param",
+                "component"
+              ],
+              "properties": {
+                "param": {
+                  "type": "string",
+                  "examples": [
+                    "name",
+                    "1"
+                  ]
+                },
+                "component": {
+                  "type": "string",
+                  "enum": [
+                    "header",
+                    "body",
+                    "button"
+                  ]
+                },
+                "example": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "header": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "image",
+                  "video",
+                  "document",
+                  "location"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "TemplateVariable": {
+        "type": "object",
+        "required": [
+          "key",
+          "placeholder",
+          "label"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "example": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ContentType": {
+        "type": "string",
+        "enum": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "document",
+          "template"
+        ]
+      },
+      "MessageStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "sent",
+          "delivered",
+          "read",
+          "failed"
+        ]
+      },
+      "Recipient": {
+        "type": "object",
+        "description": "TEPAT SATU dari contact_id, phone_number, identity.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "contact_id"
+            ],
+            "properties": {
+              "contact_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "phone_number"
+            ],
+            "properties": {
+              "phone_number": {
+                "type": "string",
+                "description": "WhatsApp saja",
+                "examples": [
+                  "081234567890"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "identity"
+            ],
+            "properties": {
+              "identity": {
+                "type": "object",
+                "required": [
+                  "channel",
+                  "external_id"
+                ],
+                "properties": {
+                  "channel": {
+                    "$ref": "#/components/schemas/ChannelName"
+                  },
+                  "external_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "TemplateVariableValue": {
+        "type": "object",
+        "required": [
+          "param",
+          "type",
+          "value"
+        ],
+        "properties": {
+          "param": {
+            "type": "string",
+            "description": "Nama/nomor parameter template"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "dynamic",
+              "custom"
+            ],
+            "description": "`dynamic` = placeholder global (mis. `{{full_name}}`) diisi saat kirim; `custom` = nilai apa adanya."
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Content": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "description": "Tepat satu kunci isi sesuai `type` (text | media | template).",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "text"
+            ],
+            "properties": {
+              "type": {
+                "const": "text"
+              },
+              "text": {
+                "type": "object",
+                "required": [
+                  "body"
+                ],
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "preview_url": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "media"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio",
+                  "document"
+                ]
+              },
+              "media": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL https yang bisa diunduh publik"
+                  },
+                  "caption": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 1024
+                  },
+                  "file_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mime_type": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "template"
+            ],
+            "properties": {
+              "type": {
+                "const": "template"
+              },
+              "template": {
+                "type": "object",
+                "required": [
+                  "template_id"
+                ],
+                "properties": {
+                  "template_id": {
+                    "type": "string"
+                  },
+                  "variables": {
+                    "type": "array",
+                    "default": [],
+                    "items": {
+                      "$ref": "#/components/schemas/TemplateVariableValue"
+                    }
+                  },
+                  "header_media": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "description": "Menimpa media header bawaan template",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "file_name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "required": [
+          "endpoint_id",
+          "recipient",
+          "content"
+        ],
+        "properties": {
+          "endpoint_id": {
+            "type": "string"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/Recipient"
+          },
+          "create_contact": {
+            "description": "WhatsApp saja; dipakai bila nomor belum terdaftar, diabaikan bila sudah ada.\nNomor diambil dari `recipient.phone_number` — tidak perlu diulang di sini.\n",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CreateContactInput"
+              }
+            ]
+          },
+          "content": {
+            "$ref": "#/components/schemas/Content"
+          },
+          "client_reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "description": "Rujukan bebas dari klien (mis. id pesanan); bisa dipakai menyaring GET /messages"
+          }
+        }
+      },
+      "SendOptions": {
+        "type": "object",
+        "required": [
+          "contact",
+          "options"
+        ],
+        "properties": {
+          "contact": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Contact"
+              }
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "endpoint",
+                "can_send",
+                "requires_template",
+                "reason"
+              ],
+              "properties": {
+                "endpoint": {
+                  "$ref": "#/components/schemas/Endpoint"
+                },
+                "can_send": {
+                  "type": "boolean"
+                },
+                "requires_template": {
+                  "type": "boolean"
+                },
+                "window_expires_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "description": "Akhir jendela 24 jam WhatsApp resmi"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "examples": [
+                    "awaiting_customer",
+                    "contact_opted_out"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "required": [
+          "id",
+          "conversation_id",
+          "contact_id",
+          "endpoint_id",
+          "channel",
+          "direction",
+          "content",
+          "status",
+          "error",
+          "client_reference",
+          "created_at",
+          "sent_at",
+          "delivered_at",
+          "read_at",
+          "failed_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string"
+          },
+          "endpoint_id": {
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelName"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "content": {
+            "type": "object",
+            "description": "Bentuk sama dengan Content; untuk template berisi ringkasan (template_id, name, language)."
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "examples": [
+                  "requires_template",
+                  "graph_error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "client_reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sent_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "failed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ContactInput": {
+        "type": "object",
+        "description": "Minimal salah satu dari phone_number atau email.",
+        "anyOf": [
+          {
+            "required": [
+              "phone_number"
+            ]
+          },
+          {
+            "required": [
+              "email"
+            ]
+          }
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120
+          },
+          "phone_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "081234567890"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lifecycle_stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "lead",
+              "customer"
+            ]
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "id"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "Asia/Jakarta"
+            ]
+          },
+          "custom_fields": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "CreateContactInput": {
+        "type": "object",
+        "description": "Data kontak baru untuk `create_contact`; semua opsional.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lifecycle_stage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "custom_fields": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ContactPatch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lifecycle_stage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "custom_fields": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Digabung per kunci; nilai null menghapus kunci"
+          },
+          "tags": {
+            "$ref": "#/components/schemas/AddRemove"
+          },
+          "group_ids": {
+            "$ref": "#/components/schemas/AddRemove"
+          }
+        }
+      },
+      "AddRemove": {
+        "type": "object",
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone_number",
+          "email",
+          "company_name",
+          "tags",
+          "group_ids",
+          "lifecycle_stage",
+          "custom_fields",
+          "source",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "E.164"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lifecycle_stage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "custom_fields": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "source": {
+            "type": "string",
+            "examples": [
+              "integration",
+              "manual",
+              "whatsapp"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ContactUpsertResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SuccessEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/Contact"
+              },
+              "meta": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Meta"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "operation"
+                    ],
+                    "properties": {
+                      "operation": {
+                        "type": "string",
+                        "enum": [
+                          "created",
+                          "updated"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ContactGroup": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "total_contacts"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "total_contacts": {
+            "type": "integer"
+          }
+        }
+      },
+      "Pipeline": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "is_default",
+          "stages"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "order",
+                "kind"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "order": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "won",
+                    "lost"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreateLeadRequest": {
+        "type": "object",
+        "required": [
+          "pipeline_id"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "contact_id"
+            ]
+          },
+          {
+            "required": [
+              "contact"
+            ]
+          }
+        ],
+        "properties": {
+          "contact_id": {
+            "type": "string"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactInput"
+          },
+          "pipeline_id": {
+            "type": "string"
+          },
+          "stage_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bawaan = stage pertama"
+          },
+          "score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "source_detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "description": "Asal lead, mis. wordpress:cf7:12"
+          },
+          "custom_fields": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Lead": {
+        "type": "object",
+        "required": [
+          "id",
+          "contact_id",
+          "pipeline_id",
+          "stage",
+          "status",
+          "score",
+          "tags",
+          "source",
+          "source_detail",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string"
+          },
+          "pipeline_id": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "converted",
+              "lost"
+            ]
+          },
+          "score": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "examples": [
+              "integration"
+            ]
+          },
+          "source_detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LeadCreateResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SuccessEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Lead"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "created"
+                    ],
+                    "properties": {
+                      "created": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "BroadcastStatus": {
+        "type": "string",
+        "enum": [
+          "scheduled",
+          "processing",
+          "paused",
+          "completed",
+          "cancelled",
+          "failed"
+        ]
+      },
+      "CreateBroadcastRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "endpoint_id",
+          "content",
+          "audience"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endpoint_id": {
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/components/schemas/Content"
+          },
+          "audience": {
+            "type": "object",
+            "description": "TEPAT SATU dari contact_ids, group_ids, recipients.",
+            "oneOf": [
+              {
+                "required": [
+                  "contact_ids"
+                ]
+              },
+              {
+                "required": [
+                  "group_ids"
+                ]
+              },
+              {
+                "required": [
+                  "recipients"
+                ]
+              }
+            ],
+            "properties": {
+              "contact_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "group_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "recipients": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "phone_number"
+                  ],
+                  "properties": {
+                    "phone_number": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "variables": {
+                      "type": "array",
+                      "description": "Menimpa variabel template untuk penerima ini",
+                      "items": {
+                        "$ref": "#/components/schemas/TemplateVariableValue"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "scheduled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "null = sekarang"
+          },
+          "sending": {
+            "type": "object",
+            "description": "WhatsApp tidak resmi saja — jeda antar pesan untuk menghindari pemblokiran.",
+            "properties": {
+              "speed": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "custom"
+                ],
+                "default": "auto"
+              },
+              "delay_seconds": {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Broadcast": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "endpoint_id",
+          "channel",
+          "transport",
+          "status",
+          "scheduled_at",
+          "summary",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endpoint_id": {
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelName"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/Transport"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BroadcastStatus"
+          },
+          "scheduled_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "total",
+              "pending",
+              "sent",
+              "delivered",
+              "read",
+              "failed"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "pending": {
+                "type": "integer"
+              },
+              "sent": {
+                "type": "integer"
+              },
+              "delivered": {
+                "type": "integer"
+              },
+              "read": {
+                "type": "integer"
+              },
+              "failed": {
+                "type": "integer"
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "BroadcastRecipient": {
+        "type": "object",
+        "required": [
+          "contact_id",
+          "phone_number",
+          "status",
+          "message_id",
+          "error",
+          "updated_at"
+        ],
+        "properties": {
+          "contact_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "message_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Followup": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "endpoint",
+          "steps",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "stopped"
+            ]
+          },
+          "endpoint": {
+            "type": "object",
+            "required": [
+              "id",
+              "channel",
+              "transport"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "channel": {
+                "$ref": "#/components/schemas/ChannelName"
+              },
+              "transport": {
+                "$ref": "#/components/schemas/Transport"
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "order",
+                "name",
+                "delay"
+              ],
+              "properties": {
+                "order": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "delay": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "minutes",
+                        "day",
+                        "month"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EnrollmentStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "completed",
+          "stopped"
+        ]
+      },
+      "EnrollRequest": {
+        "type": "object",
+        "oneOf": [
+          {
+            "required": [
+              "contact_id"
+            ]
+          },
+          {
+            "required": [
+              "contact"
+            ]
+          }
+        ],
+        "properties": {
+          "contact_id": {
+            "type": "string"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactInput"
+          },
+          "start_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "null = sekarang"
+          },
+          "variables": {
+            "type": "array",
+            "description": "Nilai variabel custom untuk seluruh langkah followup kontak ini",
+            "items": {
+              "$ref": "#/components/schemas/TemplateVariableValue"
+            }
+          },
+          "client_reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120
+          }
+        }
+      },
+      "Enrollment": {
+        "type": "object",
+        "required": [
+          "followup_id",
+          "contact_id",
+          "status",
+          "current_step",
+          "next_run_at",
+          "started_at",
+          "stopped_at",
+          "stop_reason",
+          "client_reference"
+        ],
+        "properties": {
+          "followup_id": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EnrollmentStatus"
+          },
+          "current_step": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "next_run_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stopped_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "stop_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "integration",
+              "completed",
+              "contact_replied"
+            ]
+          },
+          "client_reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "WebhookEventType": {
+        "type": "string",
+        "enum": [
+          "message.received",
+          "message.status_updated",
+          "contact.created",
+          "contact.updated",
+          "lead.created",
+          "lead.stage_changed",
+          "deal.won",
+          "deal.lost",
+          "broadcast.completed",
+          "followup.enrollment.completed",
+          "followup.enrollment.stopped",
+          "webhook.test"
+        ]
+      },
+      "WebhookInput": {
+        "type": "object",
+        "required": [
+          "url",
+          "events"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120
+          }
+        }
+      },
+      "WebhookSubscription": {
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "events",
+          "description",
+          "enabled",
+          "last_delivery",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebhookEventType"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "disabled_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "too_many_failures"
+            ]
+          },
+          "last_delivery": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "response_status": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "succeeded": {
+                "type": "boolean"
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "api_version",
+          "created_at",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/WebhookEventType"
+          },
+          "api_version": {
+            "type": "string",
+            "const": "v3"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "description": "Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment).",
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

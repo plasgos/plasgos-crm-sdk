@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk\Resource;
+namespace Plasgos\CrmSdk\Legacy\Resource;
 
-use Plasgos\CrmSdk\Envelope;
+use Plasgos\CrmSdk\Legacy\Envelope;
 
 /**
  * Credential-management endpoints (`/v2/integration/*`). Reached via

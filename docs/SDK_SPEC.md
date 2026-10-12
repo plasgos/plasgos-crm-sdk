@@ -1,235 +1,272 @@
-# SDK spec — shared contract
+# SDK spec: shared contract (API v3, SDK 2.x)
 
-This document is the single source of truth for the **method surface**, the
-**field mapping**, and the **error mapping** that the Node, PHP and Python SDKs
-must implement identically. If the API changes, update
-[`../openapi/openapi.yaml`](../openapi/openapi.yaml) first, then this file, then
-the three implementations.
+This document is the single source of truth for the **method surface**, **signing**, **response
+model**, **error mapping**, **retry policy** and **webhook verification**. The Node, PHP and Python
+SDKs must implement it identically.
+
+The API contract is [`../openapi/openapi-v3.json`](../openapi/openapi-v3.json). It is a copy; the
+source of truth lives in the `api-crm` service at
+`server/modules/api_integration/docs/openapi/integration-v3.openapi.json`.
+
+When the API changes, update `openapi-v3.json` first, then this file, then the implementations.
+
+The legacy `/api/v1` contract (`LegacyClient`) is in [SDK_SPEC_LEGACY_V1.md](SDK_SPEC_LEGACY_V1.md).
+
+| Package | 2.x status |
+|---|---|
+| PHP `plasgos/crm-sdk` | **implemented** |
+| Node `plasgos-crm-sdk` | pending (1.x is v1 only) |
+| Python `plasgos-crm-sdk` | pending (1.x is v1 only) |
 
 ## 1. Client construction
 
 ```
-Client(apiKey, secretKey, options)
+Client(apiKey, secretKey, options)        # API v3, /api/v3/*
+LegacyClient(apiKey, secretKey, options)  # deprecated, /api/v1/* (see legacy spec)
+CredentialsClient(accessToken, fingerprint, options)  # unchanged, /v2/integration/*
 ```
 
-| Option          | Default                | Meaning                                                       |
-|-----------------|------------------------|--------------------------------------------------------------|
-| `baseUrl`       | `production`           | `production`, `sandbox`, or an absolute URL string.          |
-| `timeout`       | `15000` ms             | Per-request timeout.                                          |
-| `signatureTtl`  | `300` s                | Informational; used to warn if the local clock looks skewed. |
-| `userAgent`     | `plasgos-crm-sdk-<lang>/<version>` | Sent as `User-Agent`.                           |
-| `maxRetries`    | `2`                    | Retries for **idempotent** requests (GET) on network / 5xx / 429. |
-| `fetch`/`httpClient` | platform default  | Injectable transport for tests / custom runtimes.            |
+| Option | Default | Meaning |
+|---|---|---|
+| `baseUrl` | `production` | `production`, `sandbox`, or an absolute URL (host only; the SDK appends `/api/v3`). |
+| `timeout` | 15 s | Per-request timeout. |
+| `maxRetries` | `2` | Automatic retries (§6). |
+| `maxRetryWait` | 30 s | Longest `Retry-After` honoured automatically; longer ones are raised to the caller. |
+| `userAgent` | `plasgos-crm-sdk-<lang>/<version> <runtime>/<version>` | Sent as `User-Agent`. Integrations append themselves, e.g. `plasgos-wordpress/1.0.0 (+https://shop.example)`. |
+| transport | platform default | Injectable HTTP client (PSR-18, `fetch`, `httpx`). |
+| `sleeper`, `clock` | real | Test hooks for retry waits and the signing timestamp. |
 
-`production` → `https://wa-client.plasgos.co.id`
-`sandbox`    → `https://api-crm.sandbox.plasgos.co.id`
+The base URLs are:
 
-### Credential-management client
-
-`/v2/integration/*` uses a different auth. Expose it as a separate constructor so
-the two auth modes never mix:
-
-```
-CredentialsClient(accessToken, fingerprint, options)   # options: baseUrl, timeout, userAgent, maxRetries
-```
-
-It sends `Authorization: Bearer <accessToken>` and `fingerprint: <fingerprint>`.
-The SDK does not encrypt the token — the caller passes the exact token string
-their CRM session issued.
+- `production`: `https://wa-client.plasgos.co.id`
+- `sandbox`: `https://api-crm.sandbox.plasgos.co.id`
 
 ## 2. Signing
 
-For every `/api/v1/*` request:
+Every `/api/v3/*` request except `GET /openapi.json` is signed:
 
 ```
-timestamp = floor(now_ms / 1000)
-signature = lowercase_hex( HMAC_SHA256( secretKey, apiKey + ":" + timestamp ) )
+timestamp      = floor(now / 1s)
+string_to_sign = timestamp + "\n" + UPPER(method) + "\n" + request_target + "\n" + lowercase_hex(sha256(raw_body))
+signature      = "v1=" + lowercase_hex(hmac_sha256(secretKey, string_to_sign))
+
 headers:
-  x-api-key   = apiKey
-  x-timestamp = str(timestamp)
-  x-signature = signature
-```
-
-Recompute per request. Never cache the signature.
-
-## 3. Resource methods
-
-SDK method names are `camelCase` (Node), `camelCase` (PHP), `snake_case`
-(Python). Wire field names are always `snake_case` (see column 3).
-
-### `messages` (signed)
-
-| Method | HTTP | Wire in / out |
-|---|---|---|
-| `messages.send(input)` | `POST /api/v1/messages` | `SendMessageRequest` → `Message` |
-| `messages.list()` | `GET /api/v1/messages` | → `Message[]` |
-| `messages.get(messageId)` | `GET /api/v1/messages/{message_id}` | → `Message` |
-
-`SendMessageRequest` mapping (SDK camel → wire snake):
-
-| SDK | Wire |
-|---|---|
-| `messageId` | `message_id` |
-| `channel` | `channel` (`whatsapp` \| `telegram` \| `messanger` \| `instagram`) |
-| `account.accountId` | `account.account_id` |
-| `receiver.phoneNumber` | `receiver.phone_number` |
-| `receiver.name` | `receiver.name` |
-| `content.type` | `content.type` (`text` \| `image` \| `video` \| `document`) |
-| `content.data.text` | `content.data.text` |
-| `content.data.url` | `content.data.url` |
-| `content.data.caption` | `content.data.caption` |
-| `content.data.mimeType` | `content.data.mime_type` |
-| `content.data.fileName` | `content.data.file_name` |
-
-If `messageId` is omitted, the SDK generates a UUIDv4 and returns it on the
-result so the caller can correlate.
-
-### `accounts` (signed)
-
-| Method | HTTP |
-|---|---|
-| `accounts.list()` | `GET /api/v1/accounts` |
-| `accounts.get(accountId)` | `GET /api/v1/accounts/{account_id}` |
-
-### `references` (signed)
-
-| Method | HTTP |
-|---|---|
-| `references.variables()` | `GET /api/v1/references/variables` (note: `{success,data}` envelope) |
-| `references.contacts({page?, limit?, search?})` | `GET /api/v1/references/contacts` |
-
-### `official.accounts` (signed)
-
-| Method | HTTP |
-|---|---|
-| `official.accounts.list()` | `GET /api/v1/official/accounts` |
-| `official.accounts.phoneNumbers(accountId)` | `GET /api/v1/official/accounts/phone-numbers/{accountId}` |
-
-### `official.templates` (signed)
-
-| Method | HTTP |
-|---|---|
-| `official.templates.list(accountId, {category?})` | `GET /api/v1/official/templates/{accountId}` |
-
-### `official.messages` (signed)
-
-| Method | HTTP |
-|---|---|
-| `official.messages.sendTemplate(input)` | `POST /api/v1/official/messages` |
-
-`input` maps `phoneNumberId` → `phone_number_id`; `template` is passed through
-mostly as-is (`id`, `name`, `category`, `parameters.variables[]`,
-`parameters.attachment`). `attachment.fileName` → `attachment.filename`,
-`attachment.originalName` → `attachment.original_name`,
-`attachment.fileSize` → `attachment.filesize`.
-
-### `official.broadcasts` (signed)
-
-| Method | HTTP |
-|---|---|
-| `official.broadcasts.create(input)` | `POST /api/v1/official/broadcasts` (returns `201`) |
-| `official.broadcasts.list({page?, limit?, status?, search?})` | `GET /api/v1/official/broadcasts` |
-| `official.broadcasts.monitoring(broadcastId)` | `GET /api/v1/official/broadcasts/{broadcastId}/monitoring` |
-
-`input`: `accountId`→`account_id`, `templateId`→`template_id`,
-`phoneNumberId`→`phone_number_id`, `scheduledAt`→`scheduled_at`,
-`requestId`→`request_id`, `recipients[].phoneNumber`→`recipients[].phone_number`,
-`recipients[].attachment.fileName`→`recipients[].attachment.file_name`.
-
-### `official.sharedWaba` (signed)
-
-| Method | HTTP |
-|---|---|
-| `official.sharedWaba.sendOtp(serialToken, {to, otpCode?, metadata?})` | `POST /api/v1/official/shared-waba/otp/{serial_token}` |
-
-### `credentials` (Bearer) — `CredentialsClient`
-
-| Method | HTTP |
-|---|---|
-| `credentials.get()` | `GET /v2/integration` |
-| `credentials.request()` | `POST /v2/integration` |
-| `credentials.regenerate()` | `POST /v2/integration/regenerate` |
-| `credentials.messages({page?, limit?})` | `GET /v2/integration/messages` |
-| `credentials.subscribeWebhook({webhookUrl, verifyToken?})` | `POST /v2/integration/webhook` |
-
-`webhookUrl` → `webhook_url`, `verifyToken` → `verify_token`.
-
-## 4. Response normalisation
-
-Every successful call returns a normalised envelope:
-
-```
-{
-  status:   number,          # HTTP-ish status the body reported, else the real HTTP status
-  message:  string | null,
-  data:     any,             # `data` field, or for {success,data} bodies, that data
-  metadata: object,          # `metadata` OR `meta` OR {}
-  raw:      object            # the untouched parsed body
-  httpStatus: number          # the real HTTP status
-}
+  Plasgos-Api-Key   = apiKey
+  Plasgos-Timestamp = str(timestamp)
+  Plasgos-Signature = signature
 ```
 
 Rules:
-- `{success:true,data}` → `status = httpStatus`, `message = null`, `data = body.data`.
-- `{status,message,data,metadata}` → copied through.
-- `{status,message,data,meta}` (v2) → `metadata = body.meta`.
-- Body is not an object (empty / text) → `data = body`, `metadata = {}`.
+
+- **`request_target`** is the path and query exactly as sent, e.g.
+  `/api/v3/contacts?search=budi%20santoso&page=2`. Build the query **once** using RFC 3986 encoding
+  (spaces become `%20`), dropping `null` and `""` values and turning booleans into
+  `"true"`/`"false"`. Sign that exact string.
+- **`raw_body`** is the exact bytes sent. Serialise the body **once** as JSON with unescaped slashes
+  and unicode, and send those same bytes. When there is no body, use `""`. An action POST with no
+  input sends `{}`.
+- **Recompute the timestamp and signature on every attempt.** The server rejects a skew of more
+  than 300 s with `401 signature_expired`, and `error.details.server_time` carries the server clock.
+- **Golden vectors** are in [`vectors-v3.json`](vectors-v3.json) (`request[]`). They were
+  cross-checked against the server implementation.
+
+## 3. Resources
+
+Method names are `camelCase` in Node and PHP, and `snake_case` in Python. Inputs and outputs use the
+**wire format** (`snake_case` keys) without renaming, so the OpenAPI schemas apply directly.
+
+`Page` = list result (§4.2). `Response` = single result (§4.1).
+
+| Resource | Method | HTTP | Scope |
+|---|---|---|---|
+| `me` | `get()` | `GET /me` | `account:read` |
+| `channels` | `list()` | `GET /channels` | `channels:read` |
+| `endpoints` | `list(params)` → Page | `GET /endpoints` | `channels:read` |
+| | `get(endpointId)` | `GET /endpoints/{endpoint_id}` | |
+| | `templates(endpointId, params)` → Page | `GET /endpoints/{endpoint_id}/templates` | |
+| `templateVariables` | `list()` | `GET /template-variables` | `channels:read` |
+| `messages` | `sendOptions(recipient)` | `GET /messages/send-options` | `messages:read` |
+| | `send(input, idempotencyKey?)` → 202 | `POST /messages` | `messages:write` |
+| | `get(messageId)` | `GET /messages/{message_id}` | `messages:read` |
+| | `list(params)` → Page | `GET /messages` | `messages:read` |
+| `contacts` | `list(params)` → Page | `GET /contacts` | `contacts:read` |
+| | `lookup(by)` | `GET /contacts/lookup` | |
+| | `create(contact, idempotencyKey?)` | `POST /contacts` | `contacts:write` |
+| | `upsert(contact, idempotencyKey?)` → 201/200 | `POST /contacts/upsert` | |
+| | `get(contactId)` | `GET /contacts/{contact_id}` | `contacts:read` |
+| | `update(contactId, changes)` | `PATCH /contacts/{contact_id}` | `contacts:write` |
+| `contactGroups` | `list(params)` → Page | `GET /contact-groups` | `contacts:read` |
+| `pipelines` | `list()` | `GET /pipelines` | `leads:read` |
+| `leads` | `create(lead, idempotencyKey?)` → 201/200 | `POST /leads` | `leads:write` |
+| | `get(leadId)` | `GET /leads/{lead_id}` | `leads:read` |
+| `broadcasts` | `list(params)` → Page | `GET /broadcasts` | `broadcasts:read` |
+| | `create(broadcast, idempotencyKey?)` → 202 | `POST /broadcasts` | `broadcasts:write` |
+| | `get(id)` | `GET /broadcasts/{broadcast_id}` | `broadcasts:read` |
+| | `recipients(id, params)` → Page | `GET /broadcasts/{broadcast_id}/recipients` | |
+| | `cancel(id)` | `POST /broadcasts/{broadcast_id}/cancel` | `broadcasts:write` |
+| `followups` | `list(params)` → Page | `GET /followups` | `followups:read` |
+| | `get(id)` | `GET /followups/{followup_id}` | |
+| | `enrollments(id, params)` → Page | `GET /followups/{followup_id}/enrollments` | |
+| | `enroll(id, enrollment, idempotencyKey?)` → 201/200 | `POST /followups/{followup_id}/enrollments` | `followups:write` |
+| | `unenroll(id, contactId)` | `DELETE /followups/{followup_id}/enrollments/{contact_id}` | |
+| `webhooks` | `list()` | `GET /webhooks` | `webhooks:manage` |
+| | `create(subscription)` | `POST /webhooks` (returns `signing_secret` once) | |
+| | `update(id, changes)` | `PATCH /webhooks/{webhook_id}` | |
+| | `delete(id)` | `DELETE /webhooks/{webhook_id}` | |
+| | `test(id)` | `POST /webhooks/{webhook_id}/test` | |
+| | `rotateSecret(id)` | `POST /webhooks/{webhook_id}/rotate-secret` | |
+| client | `request(method, path, query?, body?, idempotencyKey?)` | escape hatch | |
+
+- **Path ids are URL-encoded per segment.** An id can never alter the path.
+- **Server availability** is phased: V1 (`/me`, `/openapi.json`) is live; V2 adds messages and
+  endpoints; V3 adds contacts and leads; V4 adds broadcasts and followups; V5 adds webhooks. Calling
+  a method whose endpoint is not deployed yet raises `NotFound` with `error_code = route_not_found`.
+
+### 3.4 Content builders
+
+`Content.text(body, previewUrl=false)`,
+`Content.image|video|document|media(type, url, caption?, fileName?, mimeType?)`, and
+`Content.template(templateId).dynamic(param, placeholder).custom(param, value).headerMedia(url)`
+produce these shapes:
+
+```json
+{ "type": "text", "text": { "body": "Halo", "preview_url": false } }
+{ "type": "image", "media": { "url": "https://…", "caption": null, "file_name": null, "mime_type": null } }
+{ "type": "template", "template": { "template_id": "…", "variables": [ { "param": "name", "type": "dynamic", "value": "{{full_name}}" } ] } }
+```
+
+Setting the same `param` twice replaces the earlier value.
+
+## 4. Response model
+
+### 4.1 `Response`
+
+The server returns `{ success: true, message, data, meta }`. The SDK exposes these fields:
+
+| Field | Source |
+|---|---|
+| `httpStatus` | real HTTP status |
+| `message` | `body.message` (Indonesian, user-facing) |
+| `data` | `body.data` |
+| `meta` | `body.meta` (object) |
+| `requestId` | `meta.request_id`, else the `X-Request-Id` header |
+| `rateLimit` | `{ limit, remaining, reset }` from the `RateLimit-*` headers (null when absent) |
+| `replayed` | `Idempotent-Replayed: true` |
+| `headers` | lower-cased response headers |
+
+A 2xx response whose body is not this envelope raises the base error with
+`errorCode = unexpected_response`. An empty 2xx body yields `data = null`.
+
+### 4.2 `Page`
+
+A `Page` wraps a list `Response`:
+
+- `items` is always a list.
+- `pagination` is `{ page, per_page, total, total_pages, has_next_page, has_prev_page }`.
+- `hasNextPage()` and `nextPage()` are available.
+- `autoPaging()` lazily yields every item of every page. Each next page re-sends the same query with
+  `page` changed.
+- The page is iterable and countable over the current `items`.
 
 ## 5. Error mapping
 
-Non-2xx (or a body with a falsy `success` / a `status >= 400`) raises a typed
-error. Base type carries: `message`, `httpStatus`, `apiStatus`, `errors` (array,
-may be empty), `raw`, `requestId` (from `x-request-id` if present).
+Errors use the envelope `{ success:false, message, error:{ code, type, details, fields, doc_url }, meta:{ request_id } }`.
 
-| Condition | Error type |
+Every error carries:
+
+- `message`
+- `httpStatus`
+- `errorCode` (= `error.code`; branch on this)
+- `errorType`
+- `details`
+- `fields` (`[{field, code, message}]`)
+- `docUrl`
+- `requestId`
+- `retryAfter` (from the `Retry-After` header)
+- `raw`
+
+PHP and Python also keep the legacy `errors` view (`[{message, path[]}]`).
+
+| Condition | Error type (PHP name) |
 |---|---|
-| HTTP 401 | `AuthenticationError` |
-| HTTP 403, body `success:false` and message mentions plan / "tidak menyertakan" | `PlanError` (subtype of `PermissionError`) |
-| HTTP 403, otherwise | `PermissionError` |
-| HTTP 404 | `NotFoundError` |
-| HTTP 408 | `SignatureExpiredError` |
-| HTTP 409 | `ConflictError` |
-| HTTP 422, or 400 with an `errors` array | `ValidationError` (`.errors` populated) |
-| HTTP 429 | `RateLimitError` |
-| HTTP 400 (no `errors`) | `BadRequestError` |
-| HTTP >= 500 | `ServerError` |
-| network / timeout / DNS | `TransportError` |
-| anything else non-2xx | `PlasgosApiError` (base) |
+| 401 `signature_expired` | `SignatureExpiredException` (also an `AuthenticationException`) |
+| 401 | `AuthenticationException` |
+| 403 `not_entitled` | `PlanException` (also a `PermissionException`) |
+| 403 | `PermissionException` |
+| 404 | `NotFoundException` |
+| 409 | `ConflictException` |
+| 400 without `fields` | `BadRequestException` |
+| 400 with `fields`, 413, 422 | `ValidationException` |
+| 429 | `RateLimitException` (`errorCode` `rate_limited` or `daily_quota_exceeded`) |
+| 502 | `ChannelException` (also a `ServerException`) |
+| 503 | `ServiceUnavailableException` (also a `ServerException`) |
+| other ≥ 500 | `ServerException` |
+| no response (DNS, timeout, TLS) | `TransportException` (`errorCode = transport_error`) |
+| other non-2xx | base `PlasgosApiException` |
 
-> Server quirk: an un-approved key can produce **HTTP 500** from the permission
-> middleware instead of 403. `ServerError.message` will contain
-> `"You don't have permission"` in that case — surface it verbatim.
+If the error body is not JSON, `errorCode` is `unexpected_response`.
 
-## 6. Retry policy
+## 6. Idempotency & retry policy
 
-- Retry only `GET` (and only when `maxRetries > 0`).
-- Retry on: `TransportError`, `ServerError` (>=500), `RateLimitError` (429).
-- Exponential backoff: `base * 2^attempt` with `base = 500ms`, full jitter, capped 8s.
-- Never retry `POST` automatically (broadcasts use `request_id`, messages use
-  `message_id` — callers can build their own idempotent retry).
+**Idempotency key.** `POST` without an explicit key gets a UUIDv4 `Idempotency-Key`, generated
+**once per call** and reused on every retry. Integrations should pass meaningful keys per intent,
+e.g. `wc-1234-processing`.
 
-## 7. Webhook verification
+The server applies these rules to the key:
+
+| Case | Server behaviour |
+|---|---|
+| Same key and same body | Replays the first response (`replayed = true`) |
+| Same key and a different body | `422 idempotency_key_reused` |
+| Same key while the first request is still in flight | `409 idempotency_in_progress` |
+| First response was 5xx | Not stored, so retrying with the key is safe |
+
+**Retries.** `maxRetries` applies to automatic retries.
+
+- **Retried for every method:**
+  - `TransportException`
+  - `ChannelException` (502)
+  - `ServiceUnavailableException` (503)
+  - `RateLimitException` with `errorCode = rate_limited`, waiting `Retry-After` when it is at most
+    `maxRetryWait`; a longer wait is raised instead.
+- **Retried only for `GET`:** a plain `ServerException` (500), because a 500 on a write may have
+  partially run.
+- **Never retried:**
+  - `daily_quota_exceeded`
+  - any other 4xx
+
+When there is no `Retry-After`, the wait is `random(0, min(8s, 0.5s × 2^attempt))` (full jitter).
+
+## 7. Webhook verification (v3)
 
 ```
-verifyWebhook(headers, rawBody, expectedToken) -> WebhookEvent
+verify(rawBody, headers, secrets, tolerance = 300, now?) -> event
 ```
 
-- Compare `headers['x-hub-token']` to `expectedToken` with a constant-time
-  compare. Mismatch / missing ⇒ `WebhookVerificationError`.
-- Parse `rawBody` as JSON; invalid ⇒ `WebhookVerificationError`.
-- Return the parsed event. Expose an `event` discriminator with constants
-  `MESSAGE_RECEIVED = "message.received"`, `MESSAGE_STATUSES = "message.statuses"`.
-- There is **no** payload HMAC — do not advertise one.
+Headers (any casing, including `HTTP_*` server keys):
 
-## 8. Golden signature vectors
+- `Plasgos-Webhook-Id`
+- `Plasgos-Webhook-Timestamp`
+- `Plasgos-Webhook-Signature = "v1=" + hex(hmac_sha256(secret, id + "." + timestamp + "." + raw_body))`
 
-Used by every SDK's test-suite (`test/vectors.json` equivalent):
+`WebhookVerificationException` is raised when:
 
-| api_key | secret_key | timestamp | expected signature |
-|---|---|---|---|
-| `d4c997dd136d31fb9b433b269764a2774d35809e438684c3ad372d27305ac026` | `plg_0512d9ed263f7f22130e04a64f2da5bd0d461f8d398e55d796e6f1a463704266` | `1700000000` | `4b0f9e...` (compute once, then pin) |
-| `test_key` | `test_secret` | `1700000000` | pin on first run |
+- a header is missing;
+- the timestamp is not an integer or is outside `tolerance`;
+- there is no `v1=` part;
+- no secret matches (comparison is constant-time; `secrets` may hold the current and previous secret
+  during rotation);
+- the body is not JSON, has no `id`/`type`, or `id` differs from the header.
 
-Generate the reference values with the bundled script
-`openapi/../scripts` equivalent, or Node:
-`node -e "console.log(require('crypto').createHmac('sha256','plg_0512d9ed263f7f22130e04a64f2da5bd0d461f8d398e55d796e6f1a463704266').update('d4c997dd136d31fb9b433b269764a2774d35809e438684c3ad372d27305ac026:1700000000').digest('hex'))"`
+Also expose:
+
+- `signatureHeaders(id, timestamp, body, secret)` for tests;
+- event type constants: `message.received`, `message.status_updated`, `contact.created`,
+  `contact.updated`, `lead.created`, `lead.stage_changed`, `deal.won`, `deal.lost`,
+  `broadcast.completed`, `followup.enrollment.completed`, `followup.enrollment.stopped`,
+  `webhook.test`.
+
+Receivers must drop event ids they have already processed, because deliveries can repeat.
+The golden vector is in [`vectors-v3.json`](vectors-v3.json) under `webhook[]`.
+
+The legacy `x-hub-token` verifier stays available under `Legacy\` for `/api/v1` webhooks.

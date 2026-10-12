@@ -1,0 +1,44 @@
+{
+  "_comment": "Golden vectors for API v3 (docs/SDK_SPEC.md §2 and §7). request: signature = \"v1=\" + hex(hmac_sha256(secret_key, timestamp \\n METHOD \\n request_target \\n hex(sha256(body)))). webhook: \"v1=\" + hex(hmac_sha256(secret, id . timestamp . body)). Shared by the Node/PHP/Python test suites.",
+  "request": [
+    {
+      "api_key": "test_key",
+      "secret_key": "test_secret",
+      "timestamp": 1700000000,
+      "method": "GET",
+      "request_target": "/api/v3/me",
+      "body": "",
+      "string_to_sign": "1700000000\nGET\n/api/v3/me\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "v1=78a0135c200caa6b0c92f57344a7dfa4e4ae41b7c6eff8912d06116dc44d6289"
+    },
+    {
+      "api_key": "ak_live_123",
+      "secret_key": "sk_live_abc",
+      "timestamp": 1735689600,
+      "method": "GET",
+      "request_target": "/api/v3/contacts?search=budi%20santoso&page=2&per_page=50",
+      "body": "",
+      "string_to_sign": "1735689600\nGET\n/api/v3/contacts?search=budi%20santoso&page=2&per_page=50\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "v1=c3e1095d9fd279630181bdbf054a011bec4bac3a1a4d48dbc63608535a21af7f"
+    },
+    {
+      "api_key": "ak_live_123",
+      "secret_key": "sk_live_abc",
+      "timestamp": 1735689600,
+      "method": "POST",
+      "request_target": "/api/v3/messages",
+      "body": "{\"endpoint_id\":\"6281100000001\",\"recipient\":{\"phone_number\":\"081234567890\"},\"content\":{\"type\":\"text\",\"text\":{\"body\":\"Halo 👋 — pesanan/1234\",\"preview_url\":false}}}",
+      "string_to_sign": "1735689600\nPOST\n/api/v3/messages\n5aaf31cabd5c7c5175f5a8cea9229df87970b1868ef1d5a62762cdb6a3d3e02c",
+      "signature": "v1=9fc8d9efd0493933e2f620e63be512dfc09a3695f48fdc0a309df525fca47958"
+    }
+  ],
+  "webhook": [
+    {
+      "id": "evt_01JA2ZB8N4C6",
+      "timestamp": 1791530100,
+      "secret": "whsec_test",
+      "body": "{\"id\":\"evt_01JA2ZB8N4C6\",\"type\":\"message.received\",\"api_version\":\"v3\",\"created_at\":\"2026-10-09T03:15:00Z\",\"data\":{\"id\":\"msg_1\"}}",
+      "signature": "v1=91d0ce1e39ed8f612161b0620e2a8d7bbfb04b85b72ff22a907c37f0e1c44455"
+    }
+  ]
+}

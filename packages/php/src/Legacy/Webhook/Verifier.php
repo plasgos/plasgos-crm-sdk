@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk\Webhook;
+namespace Plasgos\CrmSdk\Legacy\Webhook;
 
 use Plasgos\CrmSdk\Exception\WebhookVerificationException;
 use Psr\Http\Message\ServerRequestInterface;

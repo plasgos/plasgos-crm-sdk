@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk\Resource\Official;
+namespace Plasgos\CrmSdk\Legacy\Resource\Official;
 
-use Plasgos\CrmSdk\Envelope;
-use Plasgos\CrmSdk\Resource\AbstractResource;
+use Plasgos\CrmSdk\Legacy\Envelope;
+use Plasgos\CrmSdk\Legacy\Resource\AbstractResource;
 
 final class Broadcasts extends AbstractResource
 {

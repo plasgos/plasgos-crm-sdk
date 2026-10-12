@@ -26,5 +26,11 @@ final class ClientConfig
         public readonly ?ClientInterface $httpClient = null,
         public readonly ?RequestFactoryInterface $requestFactory = null,
         public readonly ?StreamFactoryInterface $streamFactory = null,
+        /** v3: longest `Retry-After` (seconds) the client waits automatically; longer ones are thrown. */
+        public readonly int $maxRetryWait = 30,
+        /** Testing hook: fn(float $seconds): void — defaults to usleep. */
+        public readonly ?\Closure $sleeper = null,
+        /** Testing hook: fn(): int unix seconds — defaults to time(). */
+        public readonly ?\Closure $clock = null,
     ) {}
 }

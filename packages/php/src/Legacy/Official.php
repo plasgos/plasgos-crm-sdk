@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk;
+namespace Plasgos\CrmSdk\Legacy;
 
-use Plasgos\CrmSdk\Http\HttpClient;
-use Plasgos\CrmSdk\Resource\Official\Accounts;
-use Plasgos\CrmSdk\Resource\Official\Broadcasts;
-use Plasgos\CrmSdk\Resource\Official\Messages;
-use Plasgos\CrmSdk\Resource\Official\SharedWaba;
-use Plasgos\CrmSdk\Resource\Official\Templates;
+use Plasgos\CrmSdk\Legacy\Http\HttpClient;
+use Plasgos\CrmSdk\Legacy\Resource\Official\Accounts;
+use Plasgos\CrmSdk\Legacy\Resource\Official\Broadcasts;
+use Plasgos\CrmSdk\Legacy\Resource\Official\Messages;
+use Plasgos\CrmSdk\Legacy\Resource\Official\SharedWaba;
+use Plasgos\CrmSdk\Legacy\Resource\Official\Templates;
 
 /** `$client->official` — WhatsApp Business API (official) endpoints. */
 final class Official

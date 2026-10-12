@@ -4,75 +4,41 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Resource;
 
-use Plasgos\CrmSdk\Enum\Channel;
-use Plasgos\CrmSdk\Enum\ContentType;
-use Plasgos\CrmSdk\Envelope;
+use Plasgos\CrmSdk\Page;
+use Plasgos\CrmSdk\Response;
 
+/** `$client->messages` — omnichannel sending. Scopes `messages:read` / `messages:write`. */
 final class Messages extends AbstractResource
 {
     /**
-     * Send an unofficial WhatsApp message.
+     * Which endpoints can reach this recipient, and whether a template is required.
+     * Name the recipient exactly one way.
      *
-     * @param array{
-     *     message_id?: string,
-     *     channel: Channel|string,
-     *     account_id: string,
-     *     receiver: array{phone_number: string, name: string},
-     *     content: array{type: ContentType|string, data: array<string, mixed>}
-     * } $input
-     *
-     * If `message_id` is omitted a UUIDv4 is generated. The value actually sent
-     * is available as `$envelope->metadata['message_id']`.
+     * @param array{contact_id?: string, phone_number?: string, channel?: string, external_id?: string} $recipient
      */
-    public function send(array $input): Envelope
+    public function sendOptions(array $recipient): Response
     {
-        $messageId = $input['message_id'] ?? self::uuid4();
-        $channel = $input['channel'] instanceof Channel ? $input['channel']->value : $input['channel'];
-        $type = ($input['content']['type'] ?? null) instanceof ContentType
-            ? $input['content']['type']->value
-            : ($input['content']['type'] ?? null);
-
-        $body = self::compact([
-            'message_id' => $messageId,
-            'channel' => $channel,
-            'account' => ['account_id' => $input['account_id']],
-            'receiver' => [
-                'phone_number' => $input['receiver']['phone_number'],
-                'name' => $input['receiver']['name'],
-            ],
-            'content' => [
-                'type' => $type,
-                'data' => self::compact($input['content']['data'] ?? []),
-            ],
-        ]);
-
-        $envelope = $this->http->request('POST', '/api/v1/messages', body: $body);
-
-        return new Envelope(
-            status: $envelope->status,
-            message: $envelope->message,
-            data: $envelope->data,
-            metadata: ['message_id' => $messageId] + $envelope->metadata,
-            raw: $envelope->raw,
-            httpStatus: $envelope->httpStatus,
-        );
+        return $this->http->request('GET', '/messages/send-options', $recipient);
     }
 
-    public function list(): Envelope
+    /**
+     * Send one message (202). Final status arrives via get() or the `message.status_updated` webhook.
+     *
+     * @param array{endpoint_id: string, recipient: array<string, mixed>, content: array<string, mixed>|\JsonSerializable, create_contact?: array<string, mixed>|null, client_reference?: string|null} $input
+     */
+    public function send(array $input, ?string $idempotencyKey = null): Response
     {
-        return $this->http->request('GET', '/api/v1/messages');
+        return $this->http->request('POST', '/messages', body: $input, idempotencyKey: $idempotencyKey);
     }
 
-    public function get(string $messageId): Envelope
+    public function get(string $messageId): Response
     {
-        return $this->http->request('GET', '/api/v1/messages/' . rawurlencode($messageId));
+        return $this->http->request('GET', self::path('messages', $messageId));
     }
 
-    private static function uuid4(): string
+    /** @param array<string, scalar|null> $params contact_id, endpoint_id, status, client_reference, created_from, created_to, page, per_page */
+    public function list(array $params = []): Page
     {
-        $data = random_bytes(16);
-        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+        return $this->http->requestPage('/messages', $params);
     }
 }

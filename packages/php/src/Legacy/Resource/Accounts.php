@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Plasgos\CrmSdk\Resource;
+namespace Plasgos\CrmSdk\Legacy\Resource;
 
-use Plasgos\CrmSdk\Envelope;
+use Plasgos\CrmSdk\Legacy\Envelope;
 
 final class Accounts extends AbstractResource
 {

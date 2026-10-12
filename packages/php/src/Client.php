@@ -4,69 +4,105 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk;
 
+use Plasgos\CrmSdk\Http\ApiClient;
 use Plasgos\CrmSdk\Http\Transport;
-use Plasgos\CrmSdk\Resource\Accounts;
+use Plasgos\CrmSdk\Resource\Broadcasts;
+use Plasgos\CrmSdk\Resource\Channels;
+use Plasgos\CrmSdk\Resource\ContactGroups;
+use Plasgos\CrmSdk\Resource\Contacts;
+use Plasgos\CrmSdk\Resource\Endpoints;
+use Plasgos\CrmSdk\Resource\Followups;
+use Plasgos\CrmSdk\Resource\Leads;
+use Plasgos\CrmSdk\Resource\Me;
 use Plasgos\CrmSdk\Resource\Messages;
-use Plasgos\CrmSdk\Resource\References;
+use Plasgos\CrmSdk\Resource\Pipelines;
+use Plasgos\CrmSdk\Resource\TemplateVariables;
+use Plasgos\CrmSdk\Resource\Webhooks;
 
 /**
- * Signed API client for `/api/v1/*`.
+ * Plasgos CRM API Integrasi v3 client (`/api/v3/*`).
  *
  * ```php
  * $client = new \Plasgos\CrmSdk\Client($apiKey, $secretKey, new \Plasgos\CrmSdk\ClientConfig(
  *     baseUrl: \Plasgos\CrmSdk\Enum\BaseUrl::Sandbox,
  * ));
  *
- * $env = $client->messages->send([
- *     'channel' => \Plasgos\CrmSdk\Enum\Channel::WhatsApp,
- *     'account_id' => '665f1c2e9a1b2c3d4e5f6a7b',
- *     'receiver' => ['phone_number' => '628123456789', 'name' => 'John'],
- *     'content' => ['type' => 'text', 'data' => ['text' => 'Halo']],
- * ]);
+ * $client->messages->send([
+ *     'endpoint_id' => '6281100000001',
+ *     'recipient' => ['phone_number' => '081234567890'],
+ *     'content' => \Plasgos\CrmSdk\Content::template('66f1…')->dynamic('name', '{{full_name}}'),
+ * ], idempotencyKey: 'wc-1234-processing');
  * ```
+ *
+ * Every request is signed (method, path, query and body), POSTs carry an Idempotency-Key that is
+ * reused across retries, and errors are typed exceptions carrying `errorCode`.
  */
 final class Client
 {
+    public readonly Me $me;
+    public readonly Channels $channels;
+    public readonly Endpoints $endpoints;
+    public readonly TemplateVariables $templateVariables;
     public readonly Messages $messages;
-    public readonly Accounts $accounts;
-    public readonly References $references;
-    public readonly Official $official;
+    public readonly Contacts $contacts;
+    public readonly ContactGroups $contactGroups;
+    public readonly Pipelines $pipelines;
+    public readonly Leads $leads;
+    public readonly Broadcasts $broadcasts;
+    public readonly Followups $followups;
+    public readonly Webhooks $webhooks;
 
-    public readonly int $signatureTtl;
+    private readonly ApiClient $http;
 
-    public function __construct(
-        private readonly string $apiKey,
-        private readonly string $secretKey,
-        ?ClientConfig $config = null,
-    ) {
-        if ($apiKey === '') {
+    public function __construct(string $apiKey, string $secretKey, ?ClientConfig $config = null)
+    {
+        if (trim($apiKey) === '') {
             throw new \InvalidArgumentException('Client: apiKey is required');
         }
-        if ($secretKey === '') {
+        if (trim($secretKey) === '') {
             throw new \InvalidArgumentException('Client: secretKey is required');
         }
 
         $config ??= new ClientConfig();
-        $this->signatureTtl = $config->signatureTtl;
-
-        $http = Transport::fromConfig(
-            $config,
-            fn (): array => Signature::headers($this->apiKey, $this->secretKey),
+        $psr = Transport::psr($config);
+        $this->http = new ApiClient(
+            client: $psr['client'],
+            requestFactory: $psr['requestFactory'],
+            streamFactory: $psr['streamFactory'],
+            baseUrl: $psr['baseUrl'],
+            userAgent: $psr['userAgent'],
+            apiKey: trim($apiKey),
+            secretKey: trim($secretKey),
+            maxRetries: max(0, $config->maxRetries),
+            maxRetryWait: max(0, $config->maxRetryWait),
+            sleeper: $config->sleeper ?? static function (float $seconds): void {
+                usleep((int) round($seconds * 1_000_000));
+            },
+            clock: $config->clock ?? static fn (): int => time(),
         );
 
-        $this->messages = new Messages($http);
-        $this->accounts = new Accounts($http);
-        $this->references = new References($http);
-        $this->official = new Official($http);
+        $this->me = new Me($this->http);
+        $this->channels = new Channels($this->http);
+        $this->endpoints = new Endpoints($this->http);
+        $this->templateVariables = new TemplateVariables($this->http);
+        $this->messages = new Messages($this->http);
+        $this->contacts = new Contacts($this->http);
+        $this->contactGroups = new ContactGroups($this->http);
+        $this->pipelines = new Pipelines($this->http);
+        $this->leads = new Leads($this->http);
+        $this->broadcasts = new Broadcasts($this->http);
+        $this->followups = new Followups($this->http);
+        $this->webhooks = new Webhooks($this->http);
     }
 
     /**
-     * The three auth headers the SDK would send right now.
+     * Raw call for endpoints that have no resource method yet.
      *
-     * @return array{x-api-key: string, x-timestamp: string, x-signature: string}
+     * @param array<string, scalar|null> $query
+     * @param array<string, mixed>|\JsonSerializable|\stdClass|null $body
      */
-    public function signatureHeaders(?int $timestamp = null): array
+    public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null): Response
     {
-        return Signature::headers($this->apiKey, $this->secretKey, $timestamp);
+        return $this->http->request($method, $path, $query, $body, $idempotencyKey);
     }
 }

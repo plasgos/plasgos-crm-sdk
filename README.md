@@ -18,6 +18,11 @@ import into Notion.
 
 ## What the SDKs cover
 
+> **SDK 2.0 = API Integrasi v3** (`/api/v3`): omnichannel messages, contacts, leads, broadcasts,
+> followups, HMAC-signed webhooks. PHP 2.0 is implemented ([UPGRADING.md](UPGRADING.md)); Node and
+> Python 2.0 follow the same contract ([docs/SDK_SPEC.md](docs/SDK_SPEC.md)). The section below
+> describes the **legacy v1** surface (`LegacyClient` in 2.x, `Client` in 1.x).
+
 - **Signed API** (`/api/v1/*`) — HMAC-signed requests for approved API keys:
   - `messages` — send / list / get unofficial WhatsApp messages
   - `accounts` — list / get connected accounts
@@ -30,18 +35,25 @@ import into Notion.
 
 ## Source of truth
 
-1. [`openapi/openapi.yaml`](openapi/openapi.yaml) — the full API contract.
-2. [`docs/SDK_SPEC.md`](docs/SDK_SPEC.md) — the shared method surface, field
-   mapping and error mapping every SDK implements identically.
-3. [`docs/vectors.json`](docs/vectors.json) — golden HMAC signature vectors used
-   by all three test suites.
+1. [`openapi/openapi-v3.json`](openapi/openapi-v3.json): the API v3 contract. It is a copy of
+   `api-crm`'s `server/modules/api_integration/docs/openapi/integration-v3.openapi.json`.
+2. [`docs/SDK_SPEC.md`](docs/SDK_SPEC.md): the shared method surface, signing, error mapping and
+   retry policy that every SDK implements identically.
+3. [`docs/vectors-v3.json`](docs/vectors-v3.json): golden request and webhook signature vectors.
 
-Change the API → update `openapi.yaml`, then `SDK_SPEC.md`, then the three
-implementations.
+Legacy v1: [`openapi/openapi.yaml`](openapi/openapi.yaml),
+[`docs/SDK_SPEC_LEGACY_V1.md`](docs/SDK_SPEC_LEGACY_V1.md), [`docs/vectors.json`](docs/vectors.json).
+
+To change the API, update `openapi-v3.json`, then `SDK_SPEC.md`, then the three implementations.
 
 ## Authentication in one paragraph
 
-Signed API: send `x-api-key`, `x-timestamp` (Unix seconds) and
+API v3: send `Plasgos-Api-Key`, `Plasgos-Timestamp` (Unix seconds) and `Plasgos-Signature`, where
+`Plasgos-Signature = "v1=" + hex(HMAC_SHA256(secret, timestamp \n METHOD \n path?query \n hex(sha256(body))))`.
+Method, path, query and body are all signed. Webhooks carry `Plasgos-Webhook-Signature` (HMAC over
+`id.timestamp.body`).
+
+Legacy v1 signed API: send `x-api-key`, `x-timestamp` (Unix seconds) and
 `x-signature = lowercase_hex(HMAC_SHA256(secret_key, "{api_key}:{timestamp}"))`.
 The timestamp must be within 300 s of server time. Only `api_key:timestamp` is
 signed — not the method, path or body.

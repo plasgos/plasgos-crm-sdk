@@ -1,0 +1,234 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Plasgos\CrmSdk\Http;
+
+use Plasgos\CrmSdk\Exception\ChannelException;
+use Plasgos\CrmSdk\Exception\ExceptionFactory;
+use Plasgos\CrmSdk\Exception\PlasgosApiException;
+use Plasgos\CrmSdk\Exception\RateLimitException;
+use Plasgos\CrmSdk\Exception\ServerException;
+use Plasgos\CrmSdk\Exception\ServiceUnavailableException;
+use Plasgos\CrmSdk\Exception\TransportException;
+use Plasgos\CrmSdk\Page;
+use Plasgos\CrmSdk\Response;
+use Plasgos\CrmSdk\Signature;
+use Psr\Http\Client\ClientExceptionInterface;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+
+/**
+ * HTTP layer for API v3 (`/api/v3/*`): signing, idempotency, retry policy, envelope parsing.
+ * See docs/SDK_SPEC.md §2, §4–§6.
+ */
+final class ApiClient
+{
+    public const PREFIX = '/api/v3';
+
+    private const RETRY_BASE_MS = 500;
+    private const RETRY_CAP_MS = 8000;
+
+    /**
+     * @param \Closure(float): void $sleeper
+     * @param \Closure(): int $clock
+     */
+    public function __construct(
+        private readonly ClientInterface $client,
+        private readonly RequestFactoryInterface $requestFactory,
+        private readonly StreamFactoryInterface $streamFactory,
+        private readonly string $baseUrl,
+        private readonly string $userAgent,
+        private readonly string $apiKey,
+        private readonly string $secretKey,
+        private readonly int $maxRetries,
+        private readonly int $maxRetryWait,
+        private readonly \Closure $sleeper,
+        private readonly \Closure $clock,
+    ) {}
+
+    /**
+     * @param array<string, scalar|null> $query
+     * @param array<string, mixed>|\JsonSerializable|\stdClass|null $body
+     */
+    public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null): Response
+    {
+        $method = strtoupper($method);
+        $url = rtrim($this->baseUrl, '/') . self::PREFIX . '/' . ltrim($path, '/');
+        $queryString = self::buildQuery($query);
+        if ($queryString !== '') {
+            $url .= '?' . $queryString;
+        }
+        $requestTarget = self::requestTarget($url);
+        $rawBody = $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
+
+        // One key per intent: generated once here and reused by every retry.
+        if ($idempotencyKey === null && $method === 'POST') {
+            $idempotencyKey = self::uuid4();
+        }
+
+        for ($attempt = 0; ; $attempt++) {
+            try {
+                return $this->attempt($method, $url, $requestTarget, $rawBody, $idempotencyKey);
+            } catch (PlasgosApiException $e) {
+                $wait = $this->retryWait($e, $method, $attempt);
+                if ($wait === null) {
+                    throw $e;
+                }
+                ($this->sleeper)($wait);
+            }
+        }
+    }
+
+    /**
+     * @param array<string, scalar|null> $query
+     */
+    public function requestPage(string $path, array $query = []): Page
+    {
+        return new Page(
+            $this->request('GET', $path, $query),
+            fn (int $page): Page => $this->requestPage($path, ['page' => $page] + $query),
+        );
+    }
+
+    private function attempt(string $method, string $url, string $requestTarget, string $rawBody, ?string $idempotencyKey): Response
+    {
+        $timestamp = ($this->clock)();
+        $request = $this->requestFactory->createRequest($method, $url)
+            ->withHeader('Accept', 'application/json')
+            ->withHeader('User-Agent', $this->userAgent);
+        foreach (Signature::headers($this->apiKey, $this->secretKey, $method, $requestTarget, $rawBody, $timestamp) as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
+        if ($idempotencyKey !== null) {
+            $request = $request->withHeader('Idempotency-Key', $idempotencyKey);
+        }
+        if ($rawBody !== '') {
+            $request = $request
+                ->withHeader('Content-Type', 'application/json; charset=utf-8')
+                ->withBody($this->streamFactory->createStream($rawBody));
+        }
+
+        try {
+            $response = $this->client->sendRequest($request);
+        } catch (ClientExceptionInterface $e) {
+            throw new TransportException("Network error requesting {$url}: {$e->getMessage()}", previous: $e, errorCode: 'transport_error');
+        }
+
+        return self::parse($response);
+    }
+
+    public static function parse(ResponseInterface $response): Response
+    {
+        $status = $response->getStatusCode();
+        $headers = [];
+        foreach ($response->getHeaders() as $name => $values) {
+            $headers[strtolower((string) $name)] = implode(', ', $values);
+        }
+        $requestId = $headers['x-request-id'] ?? null;
+        $text = (string) $response->getBody();
+        $body = null;
+        if ($text !== '') {
+            try {
+                $decoded = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+                $body = is_array($decoded) ? $decoded : null;
+            } catch (\JsonException) {
+                $body = null;
+            }
+        }
+
+        if ($status < 200 || $status >= 300) {
+            $retryAfter = isset($headers['retry-after']) && ctype_digit($headers['retry-after']) ? (int) $headers['retry-after'] : null;
+            throw ExceptionFactory::fromV3($status, $body, $requestId, $retryAfter);
+        }
+
+        if ($text !== '' && ($body === null || ! array_key_exists('data', $body))) {
+            throw new PlasgosApiException('Plasgos CRM response is not an API v3 envelope', $status, null, [], $text, $requestId, errorCode: 'unexpected_response', errorType: 'api_error');
+        }
+
+        $meta = is_array($body['meta'] ?? null) ? $body['meta'] : [];
+        $int = static fn (?string $v): ?int => $v === null || $v === '' ? null : (int) $v;
+
+        return new Response(
+            httpStatus: $status,
+            message: is_string($body['message'] ?? null) ? $body['message'] : '',
+            data: $body['data'] ?? null,
+            meta: $meta,
+            requestId: is_string($meta['request_id'] ?? null) ? $meta['request_id'] : $requestId,
+            rateLimit: [
+                'limit' => $int($headers['ratelimit-limit'] ?? null),
+                'remaining' => $int($headers['ratelimit-remaining'] ?? null),
+                'reset' => $int($headers['ratelimit-reset'] ?? null),
+            ],
+            replayed: strtolower($headers['idempotent-replayed'] ?? '') === 'true',
+            headers: $headers,
+        );
+    }
+
+    /**
+     * Seconds to wait before retrying, or null when this error is not retried (§6).
+     */
+    private function retryWait(PlasgosApiException $e, string $method, int $attempt): ?float
+    {
+        if ($attempt >= $this->maxRetries) {
+            return null;
+        }
+        if ($e instanceof RateLimitException) {
+            // Daily quota does not recover in seconds — hand it back to the caller.
+            if ($e->errorCode !== 'rate_limited') {
+                return null;
+            }
+            if ($e->retryAfter !== null) {
+                return $e->retryAfter <= $this->maxRetryWait ? (float) $e->retryAfter : null;
+            }
+            return $this->backoff($attempt);
+        }
+        $transient = $e instanceof TransportException || $e instanceof ChannelException || $e instanceof ServiceUnavailableException;
+        // A plain 500 may have partially executed; only reads are retried on it.
+        if ($transient || ($method === 'GET' && $e instanceof ServerException)) {
+            return $this->backoff($attempt);
+        }
+        return null;
+    }
+
+    private function backoff(int $attempt): float
+    {
+        $cap = min(self::RETRY_CAP_MS, self::RETRY_BASE_MS * (2 ** $attempt));
+        return random_int(0, $cap) / 1000; // full jitter
+    }
+
+    /**
+     * @param array<string, scalar|null> $query
+     */
+    private static function buildQuery(array $query): string
+    {
+        $clean = [];
+        foreach ($query as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $clean[$key] = is_bool($value) ? ($value ? 'true' : 'false') : $value;
+        }
+        return http_build_query($clean, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    private static function requestTarget(string $url): string
+    {
+        $parts = parse_url($url);
+        $target = $parts['path'] ?? '/';
+        if (($parts['query'] ?? '') !== '') {
+            $target .= '?' . $parts['query'];
+        }
+        return $target;
+    }
+
+    public static function uuid4(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+}
