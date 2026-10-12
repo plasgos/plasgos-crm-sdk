@@ -1,4 +1,23 @@
-export { PlasgosCrmClient } from "./client.js";
+// ——— API Integration v3 (SDK 2.x) ———
+export { Client, type ClientV3Options } from "./v3/client.js";
+export { ApiResponse, Page, type Pagination, type RateLimit } from "./v3/response.js";
+export {
+  Content,
+  TemplateContent,
+  type MediaType,
+  type TextContent,
+  type MediaContent,
+  type TemplateContentShape,
+  type TemplateVariableValue,
+  type TemplateLocation,
+} from "./v3/content.js";
+export { signV3, signatureHeadersV3, stringToSign, type V3SignatureHeaders } from "./v3/signature.js";
+export { buildQuery, type Method, type Query } from "./v3/api-client.js";
+export { Webhook, WebhookEventType, type WebhookEventV3, type WebhookEventTypeName } from "./v3/webhook.js";
+export { SDK_VERSION } from "./version.js";
+
+// ——— Legacy /api/v1 (deprecated, removed in 3.0) ———
+export { LegacyClient, PlasgosCrmClient } from "./client.js";
 export { PlasgosCrmCredentialsClient } from "./credentials-client.js";
 
 export {
@@ -48,14 +67,20 @@ export {
   BadRequestError,
   RateLimitError,
   ServerError,
+  ChannelError,
+  ServiceUnavailableError,
   TransportError,
   WebhookVerificationError,
+  errorFromV3,
   type ValidationIssue,
+  type FieldError,
 } from "./errors.js";
 
 export {
   verifyWebhook,
   plasgosWebhook,
+  verifyLegacyWebhook,
+  legacyWebhookMiddleware,
   WebhookEventName,
   type WebhookEvent,
   type WebhookEventBase,

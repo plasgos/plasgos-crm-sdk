@@ -38,6 +38,13 @@ try {
      a.equal(typeof wh.verifyWebhook, "function");
      a.equal(wh.WebhookEventName.MESSAGE_RECEIVED, "message.received");
      new sdk.PlasgosCrmClient("k","s",{baseUrl:"sandbox"}).official.broadcasts;
+     // API v3 (2.x)
+     a.equal(typeof sdk.Client, "function");
+     a.equal(typeof new sdk.Client("k","s",{baseUrl:"sandbox"}).contacts.upsert, "function");
+     a.equal(sdk.signV3("test_secret",1700000000,"GET","/api/v3/me",""),
+       "v1=78a0135c200caa6b0c92f57344a7dfa4e4ae41b7c6eff8912d06116dc44d6289");
+     a.deepEqual(sdk.Content.text("Halo"), { type: "text", text: { body: "Halo", preview_url: false } });
+     a.equal(typeof wh.Webhook.verify, "function");
      console.log("  require() OK");`,
   );
   run("node", ["cjs.cjs"], work);
@@ -55,6 +62,11 @@ try {
      a.equal(WebhookEventName.MESSAGE_STATUSES, "message.statuses");
      const e = verifyWebhook({"x-hub-token":"t"}, JSON.stringify({event:"message.statuses"}), {expectedToken:"t"});
      a.equal(e.event, "message.statuses");
+     // API v3 (2.x)
+     const { Client, Webhook, WebhookEventType } = await import("plasgos-crm-sdk");
+     a.equal(typeof new Client("k","s").messages.send, "function");
+     const signed = Webhook.signatureHeaders("evt_1", 1700000000, '{"id":"evt_1","type":"webhook.test"}', "whsec_x");
+     a.equal(Webhook.verify('{"id":"evt_1","type":"webhook.test"}', signed, "whsec_x", { now: 1700000000 }).type, WebhookEventType.WEBHOOK_TEST);
      console.log("  import   OK");`,
   );
   run("node", ["esm.mjs"], work);

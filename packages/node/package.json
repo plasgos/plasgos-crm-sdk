@@ -1,7 +1,7 @@
 {
   "name": "plasgos-crm-sdk",
-  "version": "1.0.4",
-  "description": "Official Node.js / TypeScript SDK for the Plasgos CRM Api Integration API.",
+  "version": "2.0.0",
+  "description": "Official Node.js / TypeScript SDK for Plasgos CRM API Integrasi v3 (omnichannel messages, contacts, leads, broadcasts, followups, webhooks).",
   "keywords": [
     "plasgos",
     "crm",
@@ -49,7 +49,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "LEGACY_V1.md"
   ],
   "publishConfig": {
     "access": "public",

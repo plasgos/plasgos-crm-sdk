@@ -6,13 +6,15 @@ import { ReferencesResource } from "./resources/references.js";
 import { OfficialNamespace } from "./resources/official/index.js";
 import { resolveBaseUrl, type ClientOptions } from "./types.js";
 
-const SDK_VERSION = "1.0.4";
+import { SDK_VERSION } from "./version.js";
 const DEFAULT_TIMEOUT = 15_000;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_SIGNATURE_TTL = 300;
 
 /**
- * Signed API client for `/api/v1/*`.
+ * LEGACY signed client for `/api/v1/*` (`x-api-key` / `x-signature`).
+ *
+ * @deprecated Use `Client` (API Integration v3). Removed in 3.0.
  *
  * ```ts
  * const client = new PlasgosCrmClient(apiKey, secretKey, { baseUrl: "sandbox" });
@@ -24,7 +26,7 @@ const DEFAULT_SIGNATURE_TTL = 300;
  * });
  * ```
  */
-export class PlasgosCrmClient {
+export class LegacyClient {
   readonly messages: MessagesResource;
   readonly accounts: AccountsResource;
   readonly references: ReferencesResource;
@@ -40,8 +42,8 @@ export class PlasgosCrmClient {
     private readonly secretKey: string,
     options: ClientOptions = {},
   ) {
-    if (!apiKey) throw new TypeError("PlasgosCrmClient: apiKey is required");
-    if (!secretKey) throw new TypeError("PlasgosCrmClient: secretKey is required");
+    if (!apiKey) throw new TypeError("LegacyClient: apiKey is required");
+    if (!secretKey) throw new TypeError("LegacyClient: secretKey is required");
 
     // Reserved for future local-clock-skew diagnostics; the server enforces it.
     this.signatureTtl = options.signatureTtl ?? DEFAULT_SIGNATURE_TTL;
@@ -67,3 +69,12 @@ export class PlasgosCrmClient {
     return signRequest(this.apiKey, this.secretKey, timestampSeconds ?? currentTimestamp());
   }
 }
+
+/**
+ * 1.x name of the legacy v1 client.
+ *
+ * @deprecated Use `Client` (v3) — or `LegacyClient` while migrating. Removed in 3.0.
+ */
+export const PlasgosCrmClient = LegacyClient;
+/** @deprecated See `PlasgosCrmClient`. */
+export type PlasgosCrmClient = LegacyClient;

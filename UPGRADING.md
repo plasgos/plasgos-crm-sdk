@@ -43,7 +43,19 @@ The same API key and secret work on v3; only the signing scheme differs, and the
 Capabilities without a v1 equivalent (contacts, leads, followups, webhooks) need the matching scopes
 on the key. Ask Plasgos to grant them.
 
-## Node & Python
+## Node
 
-Their 2.0 release (v3 support) follows the same contract ([docs/SDK_SPEC.md](docs/SDK_SPEC.md)).
-Until then, Node and Python 1.x remain v1-only.
+`plasgos-crm-sdk` 2.0 implements the same contract ([docs/SDK_SPEC.md](docs/SDK_SPEC.md)).
+
+| 1.x | 2.0 |
+|---|---|
+| `new PlasgosCrmClient(key, secret, opts)` (`/api/v1`) | `new Client(key, secret, opts)` (`/api/v3`); the old class is `LegacyClient` (`PlasgosCrmClient` stays as a deprecated alias) |
+| `client.messages.send({ channel, account, receiver, content })` | `client.messages.send({ endpoint_id, recipient, content }, idempotencyKey)` |
+| `client.official.broadcasts.create(...)` | `client.broadcasts.create({ name, endpoint_id, content, audience })` |
+| Envelope `{ status, message, data, metadata }` | `ApiResponse { httpStatus, message, data, meta, requestId, rateLimit, replayed }`, list methods return `Page` |
+| `verifyWebhook(headers, body, { expectedToken })` (`x-hub-token`) | `Webhook.verify(rawBody, headers, signingSecret)` (HMAC `Plasgos-Webhook-Signature`) |
+| `SignatureExpiredError` (408) | still exported; now also an `AuthenticationError` (v3: 401 `signature_expired`) |
+
+## Python
+
+Its 2.0 release (v3 support) follows the same contract. Until then, Python 1.x remains v1-only.

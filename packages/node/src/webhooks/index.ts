@@ -4,6 +4,9 @@ import type { WebhookEvent } from "./types.js";
 
 export * from "./types.js";
 export { WebhookVerificationError } from "../errors.js";
+// API v3 verification (`Plasgos-Webhook-*` HMAC). What follows in this file is the LEGACY v1
+// `x-hub-token` verifier, kept for `/api/v1` webhooks until v1 is retired.
+export { Webhook, WebhookEventType, type WebhookEventV3, type WebhookEventTypeName } from "../v3/webhook.js";
 
 type HeaderBag =
   | Headers
@@ -46,6 +49,7 @@ export interface VerifyWebhookOptions {
  * @param headers  the request headers (Node `IncomingHttpHeaders`, `Headers`, or a Map)
  * @param rawBody  the raw request body as a string or Buffer
  * @param options  `{ expectedToken }`
+ * @deprecated LEGACY `/api/v1` webhooks. API v3 deliveries are HMAC-signed: use `Webhook.verify()`.
  */
 export function verifyWebhook(
   headers: HeaderBag,
@@ -86,6 +90,8 @@ export function verifyWebhook(
  *   plasgosWebhook({ expectedToken: process.env.PLASGOS_WEBHOOK_TOKEN }),
  *   (req, res) => { console.log(req.plasgosEvent); res.sendStatus(200); });
  * ```
+ *
+ * @deprecated LEGACY `/api/v1` webhooks. API v3 deliveries are HMAC-signed: use `Webhook.verify()`.
  */
 export function plasgosWebhook(options: VerifyWebhookOptions = {}) {
   return (req: any, res: any, next: any): void => {
@@ -105,3 +111,8 @@ export function plasgosWebhook(options: VerifyWebhookOptions = {}) {
     }
   };
 }
+
+/** Clearer names for the legacy `x-hub-token` verifier (`/api/v1`). @deprecated Removed in 3.0. */
+export const verifyLegacyWebhook = verifyWebhook;
+/** @deprecated Removed in 3.0. */
+export const legacyWebhookMiddleware = plasgosWebhook;

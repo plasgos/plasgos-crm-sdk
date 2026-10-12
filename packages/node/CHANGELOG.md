@@ -3,6 +3,32 @@
 All notable changes to this package are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - Unreleased
+
+### Added
+- `Client` for **API Integrasi v3** (`/api/v3`), same contract as the PHP SDK 2.0 (docs/SDK_SPEC.md):
+  - Resources: `me`, `channels`, `endpoints` (including templates), `templateVariables`, `messages`
+    (omnichannel), `contacts` (including upsert and lookup), `contactGroups`, `pipelines`, `leads`,
+    `broadcasts`, `followups` (enrol and unenrol), `webhooks`, plus `client.request()`.
+  - Request signing covers the method, path, query and body (`Plasgos-*` headers); exported as
+    `signV3`, `signatureHeadersV3`, `stringToSign`.
+  - An automatic `Idempotency-Key` on POST, reused across retries; retry policy of §6
+    (`maxRetries`, `maxRetryWait`, injectable `sleep`/`clock`).
+  - `ApiResponse` and `Page` (`autoPaging()` async iterator).
+  - `Content` / `TemplateContent` builders (`location()` for LOCATION-header templates).
+  - `Webhook.verify()` (HMAC, secret rotation with two signatures) and `WebhookEventType`.
+- `ChannelError` (502) and `ServiceUnavailableError` (503), both `ServerError`.
+- v3 error fields on every error: `errorCode`, `errorType`, `details`, `fields`, `docUrl`, `retryAfter`;
+  `errorFromV3()`.
+- Optional live test (`test/live.test.ts`, `PLASGOS_LIVE_*`).
+
+### Changed (breaking)
+- The v1 client is now `LegacyClient` (`PlasgosCrmClient` stays as a deprecated alias until 3.0);
+  its documentation moved to `LEGACY_V1.md`.
+- `SignatureExpiredError` now extends `AuthenticationError` (v3 reports clock skew as 401).
+- The legacy `x-hub-token` helpers `verifyWebhook` / `plasgosWebhook` are deprecated
+  (aliases `verifyLegacyWebhook` / `legacyWebhookMiddleware`); v3 deliveries use `Webhook.verify()`.
+
 ## [1.0.2] - 2026-09-03
 
 First release published to npm. `1.0.0` and `1.0.1` were unpublished

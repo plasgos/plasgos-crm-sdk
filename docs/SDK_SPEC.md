@@ -15,7 +15,7 @@ The legacy `/api/v1` contract (`LegacyClient`) is in [SDK_SPEC_LEGACY_V1.md](SDK
 | Package | 2.x status |
 |---|---|
 | PHP `plasgos/crm-sdk` | **implemented** |
-| Node `plasgos-crm-sdk` | pending (1.x is v1 only) |
+| Node `plasgos-crm-sdk` | **implemented** |
 | Python `plasgos-crm-sdk` | pending (1.x is v1 only) |
 
 ## 1. Client construction
