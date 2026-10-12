@@ -1,12 +1,15 @@
-# Plasgos CRM SDK — Panduan Lengkap
+# Plasgos CRM SDK — Panduan Lengkap (API Integrasi v3)
 
-Dokumentasi penggunaan SDK resmi untuk fitur **API Integration** Plasgos CRM
-(layanan `api-crm`). Tersedia untuk **Node.js / TypeScript**, **PHP**, dan
-**Python** dengan permukaan API yang identik.
+Panduan memakai SDK resmi **2.x** untuk **API Integrasi v3** Plasgos CRM (`/api/v3`). Tersedia untuk
+**Node.js / TypeScript**, **PHP**, dan **Python** dengan permukaan yang sama: nama metode
+`camelCase` di Node & PHP, `snake_case` di Python; isi permintaan & respons memakai format kabel API
+(`snake_case`) tanpa diubah.
 
-> Dokumen ini ditulis dalam Markdown standar dan aman diimpor ke Notion
-> (import → Markdown). Setiap halaman berdiri sendiri; urutan baca mengikuti
-> penomoran file.
+> Ditulis dalam Markdown standar dan aman diimpor ke Notion (import → Markdown). Setiap halaman berdiri
+> sendiri; urutan baca mengikuti penomoran.
+>
+> Masih memakai `/api/v1` (`PlasgosCrmClient` / `LegacyClient`)? Panduannya dipindah ke
+> [legacy-v1/](./legacy-v1/README.md), dan cara pindah ada di [Migrasi dari v1](./12-migrasi-dari-v1.md).
 
 ---
 
@@ -14,23 +17,25 @@ Dokumentasi penggunaan SDK resmi untuk fitur **API Integration** Plasgos CRM
 
 | # | Halaman | Isi |
 |---|---------|-----|
-| 1 | [Instalasi & Quick Start](./01-getting-started.md) | Pasang paket, contoh pertama, konsep inti |
-| 2 | [Autentikasi](./02-authentication.md) | Signed API (HMAC), credential management (Bearer), cara memperoleh kredensial |
-| 3 | [Konfigurasi Client](./03-configuration.md) | Semua opsi client, base URL, timeout, retry, transport kustom |
-| 4 | [Response Envelope & Error](./04-responses-and-errors.md) | Bentuk `Envelope`, normalisasi, hierarki error, tabel mapping status |
-| 5 | [Messages (WhatsApp Unofficial)](./05-messages.md) | Kirim teks/gambar/video/dokumen, list, detail |
-| 6 | [Accounts & References](./06-accounts-and-references.md) | Akun terhubung, variabel template, kontak |
-| 7 | [WhatsApp Official (WABA)](./07-official-whatsapp.md) | Akun, phone number, template, kirim template, broadcast, OTP shared WABA |
-| 8 | [Credential Management](./08-credential-management.md) | Request/lihat/regenerate kredensial, daftar pesan, subscribe webhook |
-| 9 | [Webhooks](./09-webhooks.md) | Event, struktur payload, verifikasi, integrasi framework |
-| 10 | [Recipes & Best Practice](./10-recipes.md) | Idempotensi, pagination, bulk, retry, testing |
+| 1 | [Mulai](./01-mulai.md) | Pasang paket, panggilan pertama, konsep inti |
+| 2 | [Autentikasi & scope](./02-autentikasi.md) | Kunci API, tanda tangan v3, scope, jam server |
+| 3 | [Konfigurasi klien](./03-konfigurasi.md) | Base URL, timeout, coba ulang, transport kustom |
+| 4 | [Respons & galat](./04-respons-dan-galat.md) | `ApiResponse`, `Page`, hierarki galat, kode galat, kebijakan coba ulang |
+| 5 | [Pesan](./05-pesan.md) | Cek penerima, kirim teks/media/template, baca status pesan |
+| 6 | [Kontak](./06-kontak.md) | Daftar, cari, buat, upsert, ubah, grup kontak |
+| 7 | [Pipeline & lead](./07-pipeline-dan-lead.md) | Pipeline & stage, buat lead |
+| 8 | [Broadcast](./08-broadcast.md) | Broadcast template WhatsApp resmi, status penerima, batalkan |
+| 9 | [Followup](./09-followup.md) | Daftarkan & keluarkan kontak dari urutan followup |
+| 10 | [Webhook](./10-webhook.md) | Langganan event, verifikasi tanda tangan, rotasi secret |
+| 11 | [Resep](./11-resep.md) | Toko online, formulir, sinkron bertahap, pengujian |
+| 12 | [Migrasi dari v1](./12-migrasi-dari-v1.md) | Padanan klien, metode, respons, webhook |
 
-Referensi teknis tambahan:
+Referensi teknis:
 
-- [`../../openapi/openapi.yaml`](../../openapi/openapi.yaml) — kontrak API (OpenAPI 3.1)
-- [`../SDK_SPEC.md`](../SDK_SPEC.md) — kontrak method/field/error yang sama di 3 SDK
-- [`../PUBLISHING_NPM.md`](../PUBLISHING_NPM.md) — registrasi & publish npm
-- [`../RELEASING.md`](../RELEASING.md) — publish ke npm / Packagist / PyPI
+- [`../../openapi/openapi-v3.json`](../../openapi/openapi-v3.json) — kontrak API v3 (OpenAPI)
+- [`../SDK_SPEC.md`](../SDK_SPEC.md) — kontrak metode, tanda tangan, galat & coba ulang yang sama di 3 SDK
+- [`../../UPGRADING.md`](../../UPGRADING.md) — perubahan 1.x → 2.0 per bahasa
+- [`../vectors-v3.json`](../vectors-v3.json) — vektor uji tanda tangan permintaan & webhook
 
 ---
 
@@ -38,89 +43,22 @@ Referensi teknis tambahan:
 
 | Bahasa | Paket | Registry | Import |
 |--------|-------|----------|--------|
-| Node.js / TypeScript | `plasgos-crm-sdk` | npm | `import { PlasgosCrmClient } from "plasgos-crm-sdk"` |
-| PHP | `plasgos/crm-sdk` | Packagist | `use Plasgos\CrmSdk\Client;` |
-| Python | `plasgos-crm-sdk` | PyPI | `from plasgos_crm import PlasgosCrmClient` |
+| Node.js / TypeScript | `plasgos-crm-sdk` | npm | `import { Client, Content } from "plasgos-crm-sdk"` |
+| PHP (8.1+) | `plasgos/crm-sdk` | Packagist | `use Plasgos\CrmSdk\Client;` |
+| Python (3.9+) | `plasgos-crm-sdk` | PyPI | `from plasgos_crm import Client, Content` |
 
----
+## Peta resource
 
-## Dua domain autentikasi
+| Resource | Node / PHP | Python | Scope |
+|---|---|---|---|
+| Akun & kuota | `me` | `me` | `account:read` |
+| Channel & titik kirim | `channels`, `endpoints`, `templateVariables` | `channels`, `endpoints`, `template_variables` | `channels:read` |
+| Pesan | `messages` | `messages` | `messages:read` / `messages:write` |
+| Kontak | `contacts`, `contactGroups` | `contacts`, `contact_groups` | `contacts:read` / `contacts:write` |
+| Pipeline & lead | `pipelines`, `leads` | `pipelines`, `leads` | `leads:read` / `leads:write` |
+| Broadcast | `broadcasts` | `broadcasts` | `broadcasts:read` / `broadcasts:write` |
+| Followup | `followups` | `followups` | `followups:read` / `followups:write` |
+| Webhook | `webhooks` | `webhooks` | `webhooks:manage` |
 
-SDK ini menutup **dua permukaan API** yang mekanismenya berbeda:
-
-| Domain | Prefix | Auth | Client SDK | Untuk siapa |
-|--------|--------|------|-----------|-------------|
-| **Signed API** | `/api/v1/*` | HMAC signature (`x-api-key` + `x-timestamp` + `x-signature`) | `PlasgosCrmClient` / `Client` | Integrator eksternal dengan API key yang sudah di-*approve* |
-| **Credential management** | `/v2/integration/*` | Sesi user CRM (`Authorization: Bearer` + `fingerprint`) | `PlasgosCrmCredentialsClient` / `CredentialsClient` | Dashboard / aplikasi first-party untuk mengelola kredensial & webhook |
-
-Detail lengkap: [Autentikasi](./02-authentication.md).
-
----
-
-## Peta method
-
-Semua method mengembalikan **`Envelope`** yang sudah dinormalisasi
-(lihat [halaman 4](./04-responses-and-errors.md)) atau melempar error bertipe.
-
-### Signed API — `PlasgosCrmClient`
-
-| Namespace | Method | Endpoint | Permission |
-|-----------|--------|----------|-----------|
-| `messages` | `send` | `POST /api/v1/messages` | `message:send` |
-| `messages` | `list` | `GET /api/v1/messages` | `message:list` |
-| `messages` | `get` | `GET /api/v1/messages/{id}` | `message:detail` |
-| `accounts` | `list` | `GET /api/v1/accounts` | `account:list` |
-| `accounts` | `get` | `GET /api/v1/accounts/{id}` | `account:detail` |
-| `references` | `variables` | `GET /api/v1/references/variables` | — (hanya signature) |
-| `references` | `contacts` | `GET /api/v1/references/contacts` | — (butuh signature valid) |
-| `official.accounts` | `list` | `GET /api/v1/official/accounts` | `official:account:list` |
-| `official.accounts` | `phoneNumbers` | `GET /api/v1/official/accounts/phone-numbers/{id}` | `official:phone-numbers:list` |
-| `official.templates` | `list` | `GET /api/v1/official/templates/{id}` | `official:templates:list` |
-| `official.messages` | `sendTemplate` | `POST /api/v1/official/messages` | `official:message:send` |
-| `official.broadcasts` | `create` | `POST /api/v1/official/broadcasts` | `official:broadcast:send` |
-| `official.broadcasts` | `list` | `GET /api/v1/official/broadcasts` | `official:broadcast:list` |
-| `official.broadcasts` | `monitoring` | `GET /api/v1/official/broadcasts/{id}/monitoring` | `official:broadcast:monitoring` |
-| `official.sharedWaba` | `sendOtp` | `POST /api/v1/official/shared-waba/otp/{token}` | `official:message:send` |
-
-### Credential management — `PlasgosCrmCredentialsClient`
-
-| Method | Endpoint |
-|--------|----------|
-| `credentials.get` | `GET /v2/integration` |
-| `credentials.request` | `POST /v2/integration` |
-| `credentials.regenerate` | `POST /v2/integration/regenerate` |
-| `credentials.messages` | `GET /v2/integration/messages` |
-| `credentials.subscribeWebhook` | `POST /v2/integration/webhook` |
-
-### Webhook helper
-
-| Fungsi | Kegunaan |
-|--------|----------|
-| `verifyWebhook(headers, rawBody, { expectedToken })` | Verifikasi `x-hub-token` + parse payload |
-| `plasgosWebhook({ expectedToken })` *(Node)* | Middleware Express |
-| `Verifier::verify(...)` / `Verifier::verifyRequest(...)` *(PHP)* | Verifikasi array headers / PSR-7 request |
-
----
-
-## Konvensi penamaan
-
-| | SDK | Wire (HTTP) |
-|-|-----|-------------|
-| Node / PHP | `camelCase` (mis. `phoneNumber`, `accountId`) | `snake_case` (`phone_number`, `account_id`) — SDK yang memetakan |
-| Python | `snake_case` argumen | `snake_case` — sama |
-
-Pengecualian penting: nilai `channel` **`"messanger"`** memang salah eja di
-server dan wajib dipakai apa adanya.
-
----
-
-## Lingkungan
-
-| Nama | Base URL |
-|------|----------|
-| `production` | `https://wa-client.plasgos.co.id` |
-| `sandbox` | `https://api-crm.sandbox.plasgos.co.id` |
-
-Semua contoh di panduan ini pakai `sandbox`. Ganti ke `production` saat siap.
-
-➡️ Lanjut: [1. Instalasi & Quick Start](./01-getting-started.md)
+Endpoint yang belum punya metode tetap bisa dipanggil lewat `client.request(method, path, …)`
+(lihat [Konfigurasi klien](./03-konfigurasi.md)).

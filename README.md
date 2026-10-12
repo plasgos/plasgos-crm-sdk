@@ -68,7 +68,7 @@ Webhooks are **not** HMAC-signed; they carry your `verify_token` in
 
 ```
 openapi/openapi.yaml         API contract (OpenAPI 3.1)
-docs/sdk-guide/              full usage guide (10 pages, Notion-ready)
+docs/sdk-guide/              full usage guide, API v3 (12 pages, Notion-ready; v1 guide in legacy-v1/)
 docs/SDK_SPEC.md             shared SDK contract
 docs/vectors.json            golden signature vectors
 docs/RELEASING.md            per-registry publish steps

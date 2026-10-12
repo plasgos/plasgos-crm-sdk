@@ -48,7 +48,7 @@ Contoh vektor (untuk uji implementasi):
 |---------|-----------|-----------|-----------|
 | `test_key` | `test_secret` | `1700000000` | `e18a0c152134399f8efa60f058ced975a2f24657e231c3bd95351d527a3c1fcb` |
 
-Vektor lengkap: [`../vectors.json`](../vectors.json).
+Vektor lengkap: [`../../vectors.json`](../../vectors.json).
 
 ### Membuat client
 
