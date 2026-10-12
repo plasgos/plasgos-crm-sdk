@@ -58,4 +58,14 @@ on the key. Ask Plasgos to grant them.
 
 ## Python
 
-Its 2.0 release (v3 support) follows the same contract. Until then, Python 1.x remains v1-only.
+`plasgos-crm-sdk` 2.0 implements the same contract ([docs/SDK_SPEC.md](docs/SDK_SPEC.md)); methods
+are `snake_case`.
+
+| 1.x | 2.0 |
+|---|---|
+| `PlasgosCrmClient(key, secret, **opts)` (`/api/v1`) | `Client(key, secret, **opts)` (`/api/v3`); the old class is `LegacyClient` (`PlasgosCrmClient` stays as a deprecated alias and emits a `DeprecationWarning`) |
+| `client.messages.send(channel=..., account_id=..., receiver=..., content=...)` | `client.messages.send({"endpoint_id": ..., "recipient": ..., "content": ...}, idempotency_key=...)` |
+| `client.official.broadcasts.create(...)` | `client.broadcasts.create({"name": ..., "endpoint_id": ..., "content": ..., "audience": ...})` |
+| `Envelope(status, message, data, metadata)` | `ApiResponse(http_status, message, data, meta, request_id, rate_limit, replayed)`, list methods return `Page` |
+| `verify_webhook(headers, body, expected_token=...)` (`x-hub-token`) | `Webhook.verify(raw_body, headers, signing_secret)` (HMAC `Plasgos-Webhook-Signature`) |
+| `SignatureExpiredError` (408) | still exported; now also an `AuthenticationError` (v3: 401 `signature_expired`) |

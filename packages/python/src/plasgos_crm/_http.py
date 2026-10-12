@@ -165,7 +165,7 @@ def normalize(http_status: int, body_text: str, request_id: str | None) -> Envel
 
     if not ok or api_status_is_error:
         raise error_from_response(
-            http_status=api_status if (ok and api_status_is_error) else http_status,
+            http_status=api_status if (ok and api_status_is_error and isinstance(api_status, int)) else http_status,
             api_status=api_status,
             message=message or f"Request failed with status {http_status}",
             errors=_extract_issues(obj) if obj is not None else [],

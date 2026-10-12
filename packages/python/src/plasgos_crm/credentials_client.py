@@ -3,11 +3,10 @@ from __future__ import annotations
 import httpx
 
 from ._http import HttpClient, resolve_base_url
+from ._version import __version__ as _VERSION
 from .resources.credentials import CredentialsResource
 
 __all__ = ["PlasgosCrmCredentialsClient"]
-
-_VERSION = "1.0.0"
 
 
 class PlasgosCrmCredentialsClient:

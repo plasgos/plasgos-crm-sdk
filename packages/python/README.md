@@ -1,12 +1,24 @@
 # plasgos-crm-sdk (Python)
 
-Official Python SDK for the **Plasgos CRM — Api Integration** API.
+Official Python SDK for **Plasgos CRM: API Integrasi v3**. The SDK covers:
 
-- One dependency (`httpx`).
-- Automatic HMAC request signing.
-- Normalised response envelope, typed exceptions.
-- Webhook verification helper.
-- Separate client for the credential-management endpoints.
+- omnichannel messages (WhatsApp official and unofficial, Instagram, Messenger)
+- contacts and leads
+- broadcasts
+- followups
+- signed webhooks
+
+Features:
+
+- Python 3.9+, one dependency (`httpx`), fully typed (`py.typed`, mypy strict).
+- Automatic request signing that covers the method, path, query and body.
+- An automatic `Idempotency-Key` on every POST, reused on retries.
+- Typed errors carrying the API `error_code`.
+- A `Page` type with `auto_paging()`.
+- Webhook HMAC verification.
+
+> Upgrading from 1.x? See [UPGRADING.md](../../UPGRADING.md). The v1 client lives on as the
+> deprecated `LegacyClient` (`PlasgosCrmClient` is an alias); its docs are in [LEGACY_V1.md](LEGACY_V1.md).
 
 ## Install
 
@@ -14,120 +26,147 @@ Official Python SDK for the **Plasgos CRM — Api Integration** API.
 pip install plasgos-crm-sdk
 ```
 
-## Quick start (signed API)
+## Quick start
 
 ```python
-from plasgos_crm import PlasgosCrmClient
+import os
 
-client = PlasgosCrmClient(
-    api_key="...",
-    secret_key="...",
-    base_url="production",  # "production" | "sandbox" | absolute URL
-)
+from plasgos_crm import Client, Content, PlasgosApiError
 
-env = client.messages.send(
-    channel="whatsapp",
-    account_id="665f1c2e9a1b2c3d4e5f6a7b",
-    receiver={"phone_number": "628123456789", "name": "John Doe"},
-    content={"type": "text", "data": {"text": "Halo dari SDK"}},
-)
-print(env.metadata["message_id"], env.data)
+with Client(
+    os.environ["PLASGOS_API_KEY"],
+    os.environ["PLASGOS_SECRET_KEY"],
+    base_url="sandbox",  # "production" by default; or an absolute URL
+) as client:
+    me = client.me.get()
+    print(me.data["tenant"]["name"])
 
-accounts = client.accounts.list()
+    try:
+        sent = client.messages.send(
+            {
+                "endpoint_id": "6281100000001",
+                "recipient": {"phone_number": "081234567890"},
+                "create_contact": {"name": "Budi Santoso"},
+                "content": Content.template("66f1a2b3c4d5e6f708192a3b")
+                .dynamic("name", "{{full_name}}")
+                .custom("order", "INV-2026-0917"),
+            },
+            idempotency_key="wc-1234-processing",  # one per intent
+        )
+        print(sent.data["status"])  # pending | sent | failed (202)
+    except PlasgosApiError as error:
+        # Branch on the stable code; show error.message (Indonesian) to people.
+        if error.error_code == "requires_template":
+            ...
+        raise
 
-client.official.messages.send_template(
-    phone_number_id="123456789012345",
-    to="6281234567890",
-    template={
-        "id": "1234567890123456",
-        "name": "order_update_v1",
-        "category": "UTILITY",
-        "parameters": {"variables": [{"type": "custom", "name": "1", "value": "Budi"}]},
-    },
-)
+    for contact in client.contacts.list(per_page=100).auto_paging():
+        ...  # every page fetched lazily
 
-client.close()  # or: with PlasgosCrmClient(...) as client: ...
+    client.contacts.upsert({"phone_number": "081234567890", "name": "Budi", "tags": ["woocommerce"]})
+    client.leads.create({"contact": {"phone_number": "081234567890"}, "pipeline_id": "pl_1"})
+    client.followups.enroll("fu_1", {"contact_id": "ct_1"})
 ```
 
-Every call returns an `Envelope`:
+Resources:
+
+- `me`, `channels`
+- `endpoints` (including `templates`), `template_variables`
+- `messages` (`send_options`, `send`, `get`)
+- `contacts`, `contact_groups`
+- `pipelines`, `leads`
+- `broadcasts`, `followups`
+- `webhooks` (including `rotate_secret`)
+
+Query parameters may be a mapping, keyword arguments, or both:
+`client.contacts.list({"tag": "vip"}, per_page=100)`.
+`client.request(method, path, query=None, body=None, idempotency_key=None)` is an escape hatch for
+endpoints that do not have a method yet. The full surface is in
+[docs/SDK_SPEC.md](../../docs/SDK_SPEC.md) §3. Inputs and outputs use the API wire format
+(snake_case), described by [openapi/openapi-v3.json](../../openapi/openapi-v3.json).
+
+## Options
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `base_url` | `"production"` | `"production"`, `"sandbox"`, or an absolute URL (host only). |
+| `timeout` | `15.0` s | Per-request timeout. |
+| `max_retries` | `2` | Automatic retries (see below). |
+| `max_retry_wait` | `30.0` s | Longest `Retry-After` honoured automatically. |
+| `user_agent` | `plasgos-crm-sdk-python/<version> python/<version>` | Integrations append themselves. |
+| `transport` / `http_client` | — | Inject an `httpx` transport (e.g. `httpx.MockTransport`) or your own `httpx.Client`. |
+| `sleeper`, `clock` | real | Test hooks. |
+
+## Responses
 
 ```python
-@dataclass(frozen=True)
-class Envelope:
-    status: int | bool
-    message: str | None
-    data: Any
-    metadata: dict
-    raw: Any
-    http_status: int
+r.http_status  # 200, 201, 202 …
+r.message      # user-facing text
+r.data         # payload
+r.meta         # e.g. {"operation": "created"} for upserts
+r.request_id   # quote it when contacting Plasgos
+r.rate_limit   # RateLimit(limit=120, remaining=119, reset=42)
+r.replayed     # True when the server replayed the first response for this Idempotency-Key
 ```
+
+List methods return a `Page`: `items`, `pagination`, `has_next_page()`, `next_page()`,
+`auto_paging()` (generator); it is iterable over the current page and supports `len()`.
 
 ## Errors
 
-```python
-from plasgos_crm import ValidationError, RateLimitError, SignatureExpiredError
-
-try:
-    client.messages.send(...)
-except ValidationError as e:
-    print(e.errors)
-except RateLimitError:
-    ...
-except SignatureExpiredError:
-    ...  # local clock skew vs. server
+```
+PlasgosApiError
+├─ AuthenticationError            401
+│  └─ SignatureExpiredError       401 signature_expired (check the server clock)
+├─ PermissionError                403 (scope_missing, api_key_revoked, …)
+│  └─ PlanError                   403 not_entitled
+├─ NotFoundError                  404
+├─ ConflictError                  409 (idempotency_in_progress, identity_taken, …)
+├─ BadRequestError                400
+├─ ValidationError                422 / 400 with fields → .fields
+├─ RateLimitError                 429 → .retry_after (rate_limited | daily_quota_exceeded)
+├─ ServerError                    5xx
+│  ├─ ChannelError                502 provider error
+│  └─ ServiceUnavailableError     503
+└─ TransportError                 no response
 ```
 
-Hierarchy: `PlasgosApiError` → `AuthenticationError`, `PermissionError`
-(`PlanError`), `NotFoundError`, `SignatureExpiredError`, `ConflictError`,
-`ValidationError`, `BadRequestError`, `RateLimitError`, `ServerError`,
-`TransportError`.
+Every error exposes `error_code`, `error_type`, `details`, `fields`, `doc_url`, `request_id` and
+`retry_after` (plus the legacy `errors` view `[{message, path}]`). `PermissionError` deliberately
+shadows the builtin inside this package; import it as `from plasgos_crm import PermissionError as
+PlasgosPermissionError` if that bothers you.
 
-> An un-approved API key can surface as HTTP 500 (`ServerError`) with a message
-> containing `"You don't have permission"` — a known server quirk.
-
-## Credential management (`/v2/integration/*`)
-
-```python
-from plasgos_crm import PlasgosCrmCredentialsClient
-
-creds = PlasgosCrmCredentialsClient(access_token, fingerprint, base_url="production")
-creds.credentials.request()
-current = creds.credentials.get()
-creds.credentials.regenerate()
-creds.credentials.subscribe_webhook(
-    webhook_url="https://your.app/webhooks/plasgos",
-    verify_token="a-shared-secret",
-)
-```
+**Retries.** Transport errors, 502/503 and `rate_limited` (for any method) are retried
+automatically up to `max_retries`, reusing the same idempotency key. A plain 500 is retried only for
+GET. Other 4xx errors and `daily_quota_exceeded` are never retried.
 
 ## Webhooks
 
 ```python
-from plasgos_crm import verify_webhook, MESSAGE_RECEIVED
+from plasgos_crm import Webhook, WebhookEventType, WebhookVerificationError
 
-event = verify_webhook(request.headers, raw_body, expected_token="a-shared-secret")
-if event["event"] == MESSAGE_RECEIVED:
-    ...
+# Flask
+@app.post("/webhooks/plasgos")
+def plasgos_webhook():
+    try:
+        event = Webhook.verify(request.get_data(), request.headers, signing_secret)
+        # during secret rotation: Webhook.verify(body, headers, [new_secret, previous_secret])
+    except WebhookVerificationError:
+        return "", 401
+    if event["type"] == WebhookEventType.MESSAGE_RECEIVED:
+        ...  # event["data"] is a Message
+    return "", 200
 ```
 
-`verify_webhook` compares the `x-hub-token` header (constant-time) and parses
-the JSON body. There is no payload HMAC.
-
-## Configuration
-
-| Argument | Default | |
-|---|---|---|
-| `base_url` | `"production"` | `"production"`, `"sandbox"`, or an absolute URL |
-| `timeout` | `15.0` | seconds |
-| `max_retries` | `2` | idempotent GET only; network / 5xx / 429 |
-| `user_agent` | `plasgos-crm-sdk-python/<version>` | |
-| `transport` / `http_client` | — | inject `httpx.MockTransport` / `httpx.Client` for tests |
+`headers` may be any mapping, including a WSGI `environ` or Django `request.META` (`HTTP_*` keys).
+Verify the **raw** body. Deliveries can repeat, so drop `event["id"]` values you have already
+processed.
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest              # tests/test_v3_live.py runs only with PLASGOS_LIVE_BASE_URL/_API_KEY/_SECRET_KEY
 mypy src
 ruff check .
 ```

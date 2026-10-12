@@ -1,27 +1,32 @@
 from __future__ import annotations
 
+import warnings
+
 import httpx
 
 from ._http import HttpClient, resolve_base_url
 from ._signature import signature_headers
+from ._version import __version__
 from .resources.accounts import AccountsResource
 from .resources.messages import MessagesResource
 from .resources.official import OfficialNamespace
 from .resources.references import ReferencesResource
 
-__all__ = ["PlasgosCrmClient"]
-
-_VERSION = "1.0.0"
+__all__ = ["LegacyClient", "PlasgosCrmClient"]
 
 
-class PlasgosCrmClient:
-    """Signed API client for ``/api/v1/*``.
+class LegacyClient:
+    """LEGACY signed API client for ``/api/v1/*``.
+
+    .. deprecated:: 2.0
+        Use :class:`plasgos_crm.Client` (API Integration v3). Removed in 3.0.
+        Constructing it emits a :class:`DeprecationWarning`.
 
     ::
 
-        from plasgos_crm import PlasgosCrmClient
+        from plasgos_crm import LegacyClient
 
-        client = PlasgosCrmClient(api_key, secret_key, base_url="sandbox")
+        client = LegacyClient(api_key, secret_key, base_url="sandbox")
         env = client.messages.send(
             channel="whatsapp",
             account_id="665f1c2e9a1b2c3d4e5f6a7b",
@@ -30,7 +35,7 @@ class PlasgosCrmClient:
         )
         client.close()
 
-    Also usable as a context manager (``with PlasgosCrmClient(...) as client:``).
+    Also usable as a context manager (``with LegacyClient(...) as client:``).
     """
 
     def __init__(
@@ -46,10 +51,15 @@ class PlasgosCrmClient:
         transport: httpx.BaseTransport | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
+        warnings.warn(
+            "LegacyClient (/api/v1) is deprecated and removed in 3.0; use plasgos_crm.Client (API v3).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not api_key:
-            raise ValueError("PlasgosCrmClient: api_key is required")
+            raise ValueError("LegacyClient: api_key is required")
         if not secret_key:
-            raise ValueError("PlasgosCrmClient: secret_key is required")
+            raise ValueError("LegacyClient: secret_key is required")
 
         self._api_key = api_key
         self._secret_key = secret_key
@@ -57,7 +67,7 @@ class PlasgosCrmClient:
 
         self._http = HttpClient(
             base_url=resolve_base_url(base_url),
-            user_agent=user_agent or f"plasgos-crm-sdk-python/{_VERSION}",
+            user_agent=user_agent or f"plasgos-crm-sdk-python/{__version__}",
             max_retries=max_retries,
             timeout=timeout,
             transport=transport,
@@ -77,8 +87,12 @@ class PlasgosCrmClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "PlasgosCrmClient":
+    def __enter__(self) -> "LegacyClient":
         return self
 
     def __exit__(self, *_exc: object) -> None:
         self.close()
+
+
+#: Old name of :class:`LegacyClient`. Deprecated; removed in 3.0.
+PlasgosCrmClient = LegacyClient

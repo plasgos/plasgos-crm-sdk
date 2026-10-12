@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from plasgos_crm import (
+    LegacyClient,
     PlasgosCrmClient,
     PlanError,
     RateLimitError,
@@ -17,11 +18,14 @@ from plasgos_crm import (
 )
 from plasgos_crm.errors import NotFoundError
 
+# Legacy /api/v1 client: deprecated in 2.0, still supported until 3.0.
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 def make_client(
     handler: Callable[[httpx.Request], httpx.Response], *, max_retries: int = 0
-) -> PlasgosCrmClient:
-    return PlasgosCrmClient(
+) -> LegacyClient:
+    return LegacyClient(
         "ak_live_123",
         "sk_live_abc",
         base_url="sandbox",
@@ -179,3 +183,10 @@ def test_does_not_retry_post() -> None:
             content={"type": "text", "data": {"text": "hi"}},
         )
     assert calls["n"] == 1
+
+
+@pytest.mark.filterwarnings("default::DeprecationWarning")
+def test_legacy_client_is_deprecated_and_keeps_old_name() -> None:
+    assert PlasgosCrmClient is LegacyClient
+    with pytest.warns(DeprecationWarning, match="use plasgos_crm.Client"):
+        LegacyClient("k", "s", transport=httpx.MockTransport(lambda r: httpx.Response(200)))

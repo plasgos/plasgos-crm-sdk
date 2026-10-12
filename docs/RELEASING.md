@@ -7,9 +7,9 @@ Bump the version wherever it appears:
 
 | Package | Files to bump |
 |---|---|
-| Node | `packages/node/package.json` (`version`) and the `SDK_VERSION` const in `src/client.ts` + `src/credentials-client.ts` |
+| Node | `packages/node/package.json` (`version`) and the `SDK_VERSION` const in `src/version.ts` |
 | PHP | `packages/php/src/Http/Transport.php` (`VERSION`) — Packagist reads the git tag, not `composer.json` |
-| Python | `packages/python/pyproject.toml` (`version`), `src/plasgos_crm/__init__.py` (`__version__`), and the `_VERSION` const in `client.py` + `credentials_client.py` |
+| Python | `packages/python/pyproject.toml` (`version`) and `__version__` in `src/plasgos_crm/_version.py` |
 
 ## Tags
 

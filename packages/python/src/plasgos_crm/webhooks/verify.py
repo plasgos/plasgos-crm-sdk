@@ -13,7 +13,7 @@ def _read_header(headers: Mapping[str, Any], name: str) -> str | None:
     # Case-insensitive lookup that also tolerates httpx.Headers / dict / list values.
     getter = getattr(headers, "get", None)
     if callable(getter):
-        value = headers.get(name) or headers.get(name.lower())  # type: ignore[union-attr]
+        value = headers.get(name) or headers.get(name.lower())
         if value is not None:
             return value[0] if isinstance(value, (list, tuple)) else str(value)
     for key, value in dict(headers).items():
