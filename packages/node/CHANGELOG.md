@@ -10,6 +10,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - `meta.created` everywhere (contact upsert: replaces `meta.operation`; message send: `true`).
 - Malformed `contact` → `422 validation_failed` with field code `invalid_contact`. Error catalog: `components.x-error-codes` in `openapi/openapi-v3.json`.
 
+### Fixed
+- `409 idempotency_in_progress` is retried with the same Idempotency-Key (the first request is still running, e.g. after a client-side timeout); other 409s such as `identity_taken` are still raised.
+
 ### Added
 - `Client` for **API Integrasi v3** (`/api/v3`), same contract as the PHP SDK 2.0 (docs/SDK_SPEC.md):
   - Resources: `me`, `channels`, `endpoints` (including templates), `templateVariables`, `messages`

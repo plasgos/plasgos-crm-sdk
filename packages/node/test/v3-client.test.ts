@@ -130,6 +130,16 @@ describe("idempotency & retries (SDK_SPEC §6)", () => {
     await expect(c.me.get()).rejects.toBeInstanceOf(RateLimitError);
   });
 
+  it("409 idempotency_in_progress is retried with the same key; other 409s are not", async () => {
+    const busy = client([fail(409, "idempotency_in_progress", "invalid_request_error"), ok()]);
+    await busy.client.messages.send({ endpoint_id: "e", contact: { id: "c" }, content: { type: "text", text: { body: "x" } } }, "order-1");
+    expect(busy.requests.map((r) => r.headers["Idempotency-Key"])).toEqual(["order-1", "order-1"]);
+    expect(busy.sleeps).toHaveLength(1);
+    const taken = client([fail(409, "identity_taken", "invalid_request_error", { contact_id: "c1" })]);
+    await expect(taken.client.contacts.create({ phone_number: "0812" })).rejects.toMatchObject({ errorCode: "identity_taken" });
+    expect(taken.requests).toHaveLength(1);
+  });
+
   it("a plain 500 retries reads but not writes", async () => {
     const read = client([fail(500, "internal_error", "api_error"), ok()]);
     await read.client.me.get();

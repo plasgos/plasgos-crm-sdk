@@ -28,6 +28,10 @@ final class ApiClient
 {
     public const PREFIX = '/api/v3';
 
+    /** Free-form maps in v3 request bodies (OpenAPI `additionalProperties`). */
+
+    private const OBJECT_MAPS = ['custom_fields'];
+
     private const RETRY_BASE_MS = 500;
     private const RETRY_CAP_MS = 8000;
 
@@ -62,7 +66,7 @@ final class ApiClient
             $url .= '?' . $queryString;
         }
         $requestTarget = self::requestTarget($url);
-        $rawBody = $body === null ? '' : json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
+        $rawBody = $body === null ? '' : json_encode(self::preserveObjectMaps($body), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
 
         // One key per intent: generated once here and reused by every retry.
         if ($idempotencyKey === null && $method === 'POST') {
@@ -185,6 +189,11 @@ final class ApiClient
             }
             return $this->backoff($attempt);
         }
+        // The first request with this Idempotency-Key is still running (e.g. it timed out client-side);
+        // retrying with the same key returns its stored answer once it finishes.
+        if ($e->errorCode === 'idempotency_in_progress') {
+            return $this->backoff($attempt);
+        }
         $transient = $e instanceof TransportException || $e instanceof ChannelException || $e instanceof ServiceUnavailableException;
         // A plain 500 may have partially executed; only reads are retried on it.
         if ($transient || ($method === 'GET' && $e instanceof ServerException)) {
@@ -212,6 +221,23 @@ final class ApiClient
             $clean[$key] = is_bool($value) ? ($value ? 'true' : 'false') : $value;
         }
         return http_build_query($clean, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    /**
+     * PHP decodes an empty JSON object as `[]`, which would be re-sent as a JSON array. Free-form maps
+     * in v3 request bodies (`custom_fields`) are always objects, so an empty one is sent as `{}` —
+     * `update($id, ['custom_fields' => $contact->data['custom_fields']])` round-trips.
+     */
+    private static function preserveObjectMaps(array|\JsonSerializable|\stdClass $body): array|\JsonSerializable|\stdClass
+    {
+        if (is_array($body)) {
+            foreach (self::OBJECT_MAPS as $key) {
+                if (array_key_exists($key, $body) && $body[$key] === []) {
+                    $body[$key] = new \stdClass();
+                }
+            }
+        }
+        return $body;
     }
 
     private static function requestTarget(string $url): string

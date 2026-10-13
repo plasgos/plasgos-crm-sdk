@@ -185,6 +185,17 @@ def test_rate_limited_honours_retry_after() -> None:
     assert h.sleeps == [2.0]
 
 
+def test_idempotency_in_progress_retried_with_same_key() -> None:
+    h = Harness([fail(409, "idempotency_in_progress", "invalid_request_error"), ok()])
+    h.client.messages.send({"endpoint_id": "e", "contact": {"id": "c"}, "content": {"type": "text", "text": {"body": "x"}}}, idempotency_key="order-1")
+    assert [r.headers["Idempotency-Key"] for r in h.requests] == ["order-1", "order-1"]
+    assert len(h.sleeps) == 1
+    h = Harness([fail(409, "identity_taken", "invalid_request_error")])
+    with pytest.raises(ConflictError):
+        h.client.contacts.create({"phone_number": "0812"})
+    assert len(h.requests) == 1
+
+
 def test_long_retry_after_and_daily_quota_are_raised() -> None:
     h = Harness([fail(429, "rate_limited", "rate_limit_error", {"Retry-After": "120"})])
     with pytest.raises(RateLimitError) as info:

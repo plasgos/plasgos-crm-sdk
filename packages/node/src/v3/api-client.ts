@@ -104,6 +104,9 @@ export class ApiClient {
       if (error.retryAfter !== null) return error.retryAfter <= this.config.maxRetryWait ? error.retryAfter * 1000 : null;
       return backoff(attempt);
     }
+    // The first request with this Idempotency-Key is still running (e.g. it timed out client-side);
+    // retrying with the same key returns its stored answer once it finishes.
+    if (error.errorCode === "idempotency_in_progress") return backoff(attempt);
     const transient = error instanceof TransportError || error instanceof ChannelError || error instanceof ServiceUnavailableError;
     // A plain 500 may have partially executed; only reads are retried on it.
     if (transient || (method === "GET" && error instanceof ServerError)) return backoff(attempt);

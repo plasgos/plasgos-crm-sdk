@@ -143,6 +143,32 @@ final class ClientTest extends TestCase
         self::assertSame([7.0], $this->sleeps);
     }
 
+    public function testIdempotencyInProgressIsRetriedWithTheSameKey(): void
+    {
+        $http = new RecordingClient([self::error(409, 'idempotency_in_progress', 'invalid_request_error'), self::ok(202, ['id' => 'm1'])]);
+        $this->client($http)->messages->send(['endpoint_id' => 'e', 'contact' => ['id' => 'c'], 'content' => ['type' => 'text', 'text' => ['body' => 'x']]], 'order-1');
+        self::assertCount(2, $http->requests);
+        self::assertSame(['order-1', 'order-1'], array_map(static fn ($r) => $r->getHeaderLine('Idempotency-Key'), $http->requests));
+        self::assertCount(1, $this->sleeps);
+
+        $http = new RecordingClient([self::error(409, 'identity_taken', 'invalid_request_error', [], ['contact_id' => 'c1'])]);
+        try {
+            $this->client($http)->contacts->create(['phone_number' => '0812']);
+            self::fail('identity_taken harus dilempar');
+        } catch (ConflictException $e) {
+            self::assertSame('identity_taken', $e->errorCode);
+        }
+        self::assertCount(1, $http->requests);
+    }
+
+    public function testEmptyCustomFieldsAreSentAsAnObject(): void
+    {
+        $http = new RecordingClient([self::ok(200, ['id' => 'c1'])]);
+        // PHP membaca {} dari server sebagai []; dikirim balik harus tetap objek (server: z.record).
+        $this->client($http)->contacts->update('c1', ['name' => 'Budi', 'custom_fields' => []]);
+        self::assertSame('{"name":"Budi","custom_fields":{}}', (string) $http->lastRequest()->getBody());
+    }
+
     public function testLongRetryAfterAndDailyQuotaAreHandedBack(): void
     {
         $http = new RecordingClient([self::error(429, 'daily_quota_exceeded', 'rate_limit_error', ['Retry-After' => '3600'], ['used' => 1000, 'limit' => 1000])]);

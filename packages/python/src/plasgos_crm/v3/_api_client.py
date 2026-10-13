@@ -134,6 +134,10 @@ class ApiClient:
             if error.retry_after is not None:
                 return float(error.retry_after) if error.retry_after <= self._max_retry_wait else None
             return _backoff(attempt)
+        # The first request with this Idempotency-Key is still running (e.g. it timed out client-side);
+        # retrying with the same key returns its stored answer once it finishes.
+        if error.error_code == "idempotency_in_progress":
+            return _backoff(attempt)
         transient = isinstance(error, (TransportError, ChannelError, ServiceUnavailableError))
         # A plain 500 may have partially executed; only reads are retried on it.
         if transient or (method == "GET" and isinstance(error, ServerError)):

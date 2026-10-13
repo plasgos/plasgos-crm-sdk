@@ -12,7 +12,14 @@ import os
 
 import pytest
 
-from plasgos_crm import AuthenticationError, Client, Content, NotFoundError, PlasgosApiError, ValidationError
+from plasgos_crm import (
+    AuthenticationError,
+    Client,
+    Content,
+    NotFoundError,
+    PlasgosApiError,
+    ValidationError,
+)
 
 ENV = os.environ
 LIVE = all(ENV.get(k) for k in ("PLASGOS_LIVE_BASE_URL", "PLASGOS_LIVE_API_KEY", "PLASGOS_LIVE_SECRET_KEY"))

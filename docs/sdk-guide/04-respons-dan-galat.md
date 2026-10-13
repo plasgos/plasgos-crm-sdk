@@ -100,8 +100,9 @@ Galat khusus tiap endpoint ada di halaman masing-masing. Katalog lengkap (status
 |---|---|
 | `TransportError`, 502, 503 | Ya, semua metode |
 | 429 `rate_limited` | Ya; menunggu `Retry-After` bila ≤ `maxRetryWait`, lebih lama dari itu dilempar |
+| 409 `idempotency_in_progress` | Ya, dengan kunci yang sama — permintaan pertama masih diproses (mis. habis waktu di sisi klien); begitu selesai, server mengulang jawabannya |
 | 500 biasa | Hanya GET (tulisan mungkin sudah sebagian jalan) |
-| `daily_quota_exceeded`, 4xx lain | Tidak pernah |
+| `daily_quota_exceeded`, 4xx lain (termasuk 409 `identity_taken`) | Tidak pernah |
 
 Tanpa `Retry-After`, jeda = acak 0 … min(8 dtk, 0,5 dtk × 2^percobaan). Coba ulang memakai
 Idempotency-Key yang sama, jadi aman untuk POST. Jawaban 5xx tak disimpan server, sehingga mengulang

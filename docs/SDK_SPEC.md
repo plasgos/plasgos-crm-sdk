@@ -231,11 +231,14 @@ The server applies these rules to the key:
   - `ServiceUnavailableException` (503)
   - `RateLimitException` with `errorCode = rate_limited`, waiting `Retry-After` when it is at most
     `maxRetryWait`; a longer wait is raised instead.
+  - `ConflictException` with `errorCode = idempotency_in_progress` (409): the first request with the
+    same key is still running — typically after a client-side timeout — and the retry returns its
+    stored answer once it finishes.
 - **Retried only for `GET`:** a plain `ServerException` (500), because a 500 on a write may have
   partially run.
 - **Never retried:**
   - `daily_quota_exceeded`
-  - any other 4xx
+  - any other 4xx (including other 409s such as `identity_taken`)
 
 When there is no `Retry-After`, the wait is `random(0, min(8s, 0.5s × 2^attempt))` (full jitter).
 

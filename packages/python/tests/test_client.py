@@ -9,8 +9,8 @@ import pytest
 
 from plasgos_crm import (
     LegacyClient,
-    PlasgosCrmClient,
     PlanError,
+    PlasgosCrmClient,
     RateLimitError,
     ServerError,
     SignatureExpiredError,

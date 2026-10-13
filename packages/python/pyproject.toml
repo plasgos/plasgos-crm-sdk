@@ -37,6 +37,10 @@ testpaths = ["tests"]
 line-length = 100
 target-version = "py39"
 
+[tool.ruff.lint]
+# Aturan eksplisit: himpunan bawaan ruff berubah antar versi (0.17 jauh lebih luas), CI harus deterministik.
+select = ["E4", "E7", "E9", "F", "I"]
+
 [tool.mypy]
 python_version = "3.9"
 strict = true
