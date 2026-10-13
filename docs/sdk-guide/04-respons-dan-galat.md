@@ -30,7 +30,11 @@ jadi selalu sama dengan API:
   `Page`).
 - **Python:** `from plasgos_crm.v3 import types as t` → `t.Contact`, `t.SendMessageBody`,
   `t.ListContactsQuery` (TypedDict); `ApiResponse[t.Contact]`, `Page[t.Contact]`.
-- **PHP:** larik format kabel (bentuk persis seperti OpenAPI).
+- **PHP:** larik format kabel, dengan array shape PHPStan/Psalm per skema dan per operasi
+  (`Plasgos\CrmSdk\Types\ApiTypes`). Setiap metode resource bertipe — `Response<GetContactData,
+  GetContactMeta>`, `Page<ListContactsItem>`, body `SendMessageBody` — sehingga PHPStan/IDE tahu
+  `$r->data['tags']` adalah `list<string>`. Impor skema di kelas Anda:
+  `@phpstan-import-type Contact from \Plasgos\CrmSdk\Types\ApiTypes`.
 
 ## `Page` (metode daftar)
 

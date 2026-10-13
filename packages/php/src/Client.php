@@ -101,6 +101,7 @@ final class Client
      *
      * @param array<string, scalar|null> $query
      * @param array<string, mixed>|\JsonSerializable|\stdClass|null $body
+     * @return Response<mixed, array<string, mixed>>
      */
     public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {

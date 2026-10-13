@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Exception;
 
+use Plasgos\CrmSdk\Http\Json;
+
 /**
  * Base class for every error raised by the SDK.
  *
@@ -93,19 +95,20 @@ final class ExceptionFactory
      */
     public static function fromV3(int $httpStatus, ?array $body, ?string $requestId, ?int $retryAfter): PlasgosApiException
     {
-        $error = is_array($body['error'] ?? null) ? $body['error'] : [];
-        $message = is_string($body['message'] ?? null) && $body['message'] !== ''
-            ? $body['message']
-            : "Plasgos CRM responded with HTTP {$httpStatus}";
-        $code = is_string($error['code'] ?? null) ? $error['code'] : ($body === null ? 'unexpected_response' : 'http_' . $httpStatus);
-        $type = is_string($error['type'] ?? null) ? $error['type'] : null;
+        $error = Json::object($body['error'] ?? null) ?? [];
+        $message = Json::string($body['message'] ?? null);
+        if ($message === '') {
+            $message = "Plasgos CRM responded with HTTP {$httpStatus}";
+        }
+        $code = Json::stringOrNull($error['code'] ?? null) ?? ($body === null ? 'unexpected_response' : 'http_' . $httpStatus);
+        $type = Json::stringOrNull($error['type'] ?? null);
         $fields = [];
         foreach (is_array($error['fields'] ?? null) ? $error['fields'] : [] as $field) {
             if (is_array($field)) {
                 $fields[] = [
-                    'field' => (string) ($field['field'] ?? ''),
-                    'code' => (string) ($field['code'] ?? ''),
-                    'message' => (string) ($field['message'] ?? ''),
+                    'field' => Json::string($field['field'] ?? null),
+                    'code' => Json::string($field['code'] ?? null),
+                    'message' => Json::string($field['message'] ?? null),
                 ];
             }
         }
@@ -113,7 +116,7 @@ final class ExceptionFactory
             static fn (array $f): array => ['message' => $f['message'], 'path' => $f['field'] === '' ? [] : explode('.', $f['field'])],
             $fields,
         );
-        $metaRequestId = is_array($body['meta'] ?? null) && is_string($body['meta']['request_id'] ?? null) ? $body['meta']['request_id'] : null;
+        $metaRequestId = Json::stringOrNull(Json::object($body['meta'] ?? null)['request_id'] ?? null);
 
         $args = [
             'message' => $message,
@@ -124,9 +127,9 @@ final class ExceptionFactory
             'requestId' => $metaRequestId ?? $requestId,
             'errorCode' => $code,
             'errorType' => $type,
-            'details' => is_array($error['details'] ?? null) ? $error['details'] : null,
+            'details' => Json::object($error['details'] ?? null),
             'fields' => $fields,
-            'docUrl' => is_string($error['doc_url'] ?? null) ? $error['doc_url'] : null,
+            'docUrl' => Json::stringOrNull($error['doc_url'] ?? null),
             'retryAfter' => $retryAfter,
         ];
 

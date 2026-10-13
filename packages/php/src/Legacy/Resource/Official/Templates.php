@@ -11,13 +11,14 @@ final class Templates extends AbstractResource
 {
     /**
      * @param array{category?: string} $params  category: MARKETING|UTILITY|AUTHENTICATION|OTP
+     * @return Envelope<mixed>
      */
     public function list(string $accountId, array $params = []): Envelope
     {
         return $this->http->request(
             'GET',
             '/api/v1/official/templates/' . rawurlencode($accountId),
-            query: self::compact(['category' => $params['category'] ?? null]),
+            query: self::query(['category' => $params['category'] ?? null]),
         );
     }
 }

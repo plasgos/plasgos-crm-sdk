@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Legacy\Http;
 
-use Plasgos\CrmSdk\Legacy\Envelope;
 use Plasgos\CrmSdk\Exception\ExceptionFactory;
 use Plasgos\CrmSdk\Exception\PlasgosApiException;
 use Plasgos\CrmSdk\Exception\RateLimitException;
 use Plasgos\CrmSdk\Exception\ServerException;
 use Plasgos\CrmSdk\Exception\TransportException;
+use Plasgos\CrmSdk\Http\Json;
+use Plasgos\CrmSdk\Legacy\Envelope;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -36,6 +37,7 @@ final class HttpClient
     /**
      * @param array<string, scalar|null> $query
      * @param array<string, mixed>|null  $body
+     * @return Envelope<mixed>
      */
     public function request(
         string $method,
@@ -69,6 +71,7 @@ final class HttpClient
 
     /**
      * @param array<string, mixed>|null $body
+     * @return Envelope<mixed>
      */
     private function attempt(string $method, string $url, ?array $body): Envelope
     {
@@ -132,6 +135,7 @@ final class HttpClient
     /**
      * Normalise the many server envelope shapes into one Envelope, or throw.
      * See docs/SDK_SPEC.md §4/§5.
+     * @return Envelope<mixed>
      */
     public static function normalize(int $httpStatus, string $bodyText, ?string $requestId): Envelope
     {
@@ -144,7 +148,7 @@ final class HttpClient
             }
         }
 
-        $obj = is_array($body) && ! array_is_list($body) ? $body : null;
+        $obj = is_array($body) && ! array_is_list($body) ? Json::object($body) : null;
         $ok = $httpStatus >= 200 && $httpStatus < 300;
 
         // { success, data } shape
@@ -171,12 +175,12 @@ final class HttpClient
 
         $apiStatus = $obj !== null && array_key_exists('status', $obj) ? $obj['status'] : null;
         $message = $obj !== null && is_string($obj['message'] ?? null) ? $obj['message'] : null;
-        $apiStatusIsError = is_int($apiStatus) && $apiStatus >= 400;
+        $apiErrorStatus = is_int($apiStatus) && $apiStatus >= 400 ? $apiStatus : null;
 
-        if (! $ok || $apiStatusIsError) {
+        if (! $ok || $apiErrorStatus !== null) {
             throw ExceptionFactory::fromResponse(
-                $ok && $apiStatusIsError ? (int) $apiStatus : $httpStatus,
-                $apiStatus,
+                ($ok ? $apiErrorStatus : null) ?? $httpStatus,
+                is_int($apiStatus) || is_string($apiStatus) ? $apiStatus : null,
                 $message ?? "Request failed with status {$httpStatus}",
                 $obj !== null ? self::extractIssues($obj) : [],
                 $body,
@@ -188,12 +192,7 @@ final class HttpClient
             return new Envelope($httpStatus, null, $body, [], $body, $httpStatus);
         }
 
-        $metadata = [];
-        if (isset($obj['metadata']) && is_array($obj['metadata'])) {
-            $metadata = $obj['metadata'];
-        } elseif (isset($obj['meta']) && is_array($obj['meta'])) {
-            $metadata = $obj['meta'];
-        }
+        $metadata = Json::object($obj['metadata'] ?? null) ?? Json::object($obj['meta'] ?? null) ?? [];
 
         return new Envelope(
             status: is_int($apiStatus) || is_bool($apiStatus) ? $apiStatus : $httpStatus,
@@ -218,13 +217,13 @@ final class HttpClient
         $out = [];
         foreach ($raw as $e) {
             if (is_array($e)) {
-                $issue = ['message' => (string) ($e['message'] ?? '')];
+                $issue = ['message' => Json::string($e['message'] ?? null)];
                 if (isset($e['path']) && is_array($e['path'])) {
-                    $issue['path'] = array_values($e['path']);
+                    $issue['path'] = array_values(array_filter($e['path'], static fn (mixed $p): bool => is_string($p) || is_int($p)));
                 }
                 $out[] = $issue;
             } else {
-                $out[] = ['message' => (string) $e];
+                $out[] = ['message' => Json::string($e)];
             }
         }
         return $out;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plasgos\CrmSdk\Webhook;
 
 use Plasgos\CrmSdk\Exception\WebhookVerificationException;
+use Plasgos\CrmSdk\Http\Json;
 use Plasgos\CrmSdk\Signature;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -24,8 +25,8 @@ final class Webhook
     public const DEFAULT_TOLERANCE = 300;
 
     /**
-     * @param array<string, string|list<string>> $headers any casing; `HTTP_*` server keys accepted
-     * @param string|list<string> $secrets current secret, or current + previous during rotation
+     * @param array<array-key, string|array<string>> $headers any casing; `HTTP_*` server keys or PSR-7 `getHeaders()`
+     * @param string|list<string|null> $secrets current secret, or current + previous during rotation (null/empty skipped)
      * @return array<string, mixed> the decoded event
      */
     public static function verify(string $rawBody, array $headers, string|array $secrets, int $tolerance = self::DEFAULT_TOLERANCE, ?int $now = null): array
@@ -75,10 +76,11 @@ final class Webhook
         } catch (\JsonException $e) {
             throw new WebhookVerificationException('Webhook verification failed: body is not valid JSON', 0, $e);
         }
-        if (! is_array($event) || ! isset($event['id'], $event['type'])) {
+        $event = Json::object($event);
+        if ($event === null || ! isset($event['id'], $event['type'])) {
             throw new WebhookVerificationException('Webhook verification failed: body is not an event');
         }
-        if ((string) $event['id'] !== $id) {
+        if (Json::string($event['id']) !== $id) {
             throw new WebhookVerificationException('Webhook verification failed: event id does not match header');
         }
 
@@ -88,7 +90,7 @@ final class Webhook
     /**
      * PSR-7 convenience wrapper.
      *
-     * @param string|list<string> $secrets
+     * @param string|list<string|null> $secrets
      * @return array<string, mixed>
      */
     public static function verifyRequest(ServerRequestInterface $request, string|array $secrets, int $tolerance = self::DEFAULT_TOLERANCE): array
@@ -111,7 +113,7 @@ final class Webhook
     }
 
     /**
-     * @param array<string, string|list<string>> $headers
+     * @param array<array-key, string|array<string>> $headers
      * @return array<string, string>
      */
     private static function normalize(array $headers): array
@@ -122,7 +124,7 @@ final class Webhook
             if (str_starts_with($key, 'http-')) {
                 $key = substr($key, 5);
             }
-            $out[$key] = trim(is_array($value) ? (string) ($value[0] ?? '') : (string) $value);
+            $out[$key] = trim(is_array($value) ? (reset($value) ?: '') : $value);
         }
         return $out;
     }

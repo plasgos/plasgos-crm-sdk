@@ -32,7 +32,7 @@ final class Transport
             'timeout' => $config->timeout,
             'connect_timeout' => $config->timeout,
         ]);
-        $psr17 = ($config->requestFactory === null || $config->streamFactory === null) ? new HttpFactory() : null;
+        $psr17 = new HttpFactory();
 
         return [
             'client' => $client,

@@ -1,0 +1,7 @@
+parameters:
+    level: max
+    paths:
+        - src
+        # Integrator-style code with PHPStan type assertions on the generated API types.
+        - tests/Types
+    tmpDir: .phpstan-cache

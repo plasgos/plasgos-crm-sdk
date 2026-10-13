@@ -60,6 +60,7 @@ final class ApiClient
     /**
      * @param array<string, scalar|null> $query
      * @param array<string, mixed>|\JsonSerializable|\stdClass|null $body
+     * @return Response<mixed, array<string, mixed>>
      */
     public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
@@ -100,6 +101,7 @@ final class ApiClient
 
     /**
      * @param array<string, scalar|null> $query
+     * @return Page<mixed>
      */
     public function requestPage(string $path, array $query = [], ?RequestOptions $options = null): Page
     {
@@ -109,6 +111,7 @@ final class ApiClient
         );
     }
 
+    /** @return Response<mixed, array<string, mixed>> */
     private function attempt(string $method, string $url, string $requestTarget, string $rawBody, ?string $idempotencyKey, RequestOptions $options): Response
     {
         $timestamp = ($this->clock)();
@@ -155,6 +158,7 @@ final class ApiClient
         return $this->client->send($request, ['timeout' => $timeout, 'connect_timeout' => $timeout, 'http_errors' => false, 'allow_redirects' => false]);
     }
 
+    /** @return Response<mixed, array<string, mixed>> */
     public static function parse(ResponseInterface $response): Response
     {
         $status = $response->getStatusCode();
@@ -167,8 +171,7 @@ final class ApiClient
         $body = null;
         if ($text !== '') {
             try {
-                $decoded = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
-                $body = is_array($decoded) ? $decoded : null;
+                $body = Json::object(json_decode($text, true, 512, JSON_THROW_ON_ERROR));
             } catch (\JsonException) {
                 $body = null;
             }
@@ -183,15 +186,15 @@ final class ApiClient
             throw new PlasgosApiException('Plasgos CRM response is not an API v3 envelope', $status, null, [], $text, $requestId, errorCode: 'unexpected_response', errorType: 'api_error');
         }
 
-        $meta = is_array($body['meta'] ?? null) ? $body['meta'] : [];
+        $meta = Json::object($body['meta'] ?? null) ?? [];
         $int = static fn (?string $v): ?int => $v === null || $v === '' ? null : (int) $v;
 
         return new Response(
             httpStatus: $status,
-            message: is_string($body['message'] ?? null) ? $body['message'] : '',
+            message: Json::string($body['message'] ?? null),
             data: $body['data'] ?? null,
             meta: $meta,
-            requestId: is_string($meta['request_id'] ?? null) ? $meta['request_id'] : $requestId,
+            requestId: Json::stringOrNull($meta['request_id'] ?? null) ?? $requestId,
             rateLimit: [
                 'limit' => $int($headers['ratelimit-limit'] ?? null),
                 'remaining' => $int($headers['ratelimit-remaining'] ?? null),
@@ -284,6 +287,9 @@ final class ApiClient
     }
 
     /**
+     * @param array<string, mixed>|\JsonSerializable|\stdClass $body
+     * @return array<string, mixed>|\JsonSerializable|\stdClass
+     *
      * PHP decodes an empty JSON object as `[]`, which would be re-sent as a JSON array. Free-form maps
      * in v3 request bodies (`custom_fields`) are always objects, so an empty one is sent as `{}` —
      * `update($id, ['custom_fields' => $contact->data['custom_fields']])` round-trips.

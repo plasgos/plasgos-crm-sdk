@@ -13,6 +13,7 @@ final class SharedWaba extends AbstractResource
      * Send an OTP through a shared WABA serial token.
      *
      * @param array{to: string, otp_code?: string|null, metadata?: array<string, mixed>|null} $input
+     * @return Envelope<mixed>
      */
     public function sendOtp(string $serialToken, array $input): Envelope
     {

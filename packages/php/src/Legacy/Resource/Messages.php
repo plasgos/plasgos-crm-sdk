@@ -18,19 +18,20 @@ final class Messages extends AbstractResource
      *     channel: Channel|string,
      *     account_id: string,
      *     receiver: array{phone_number: string, name: string},
-     *     content: array{type: ContentType|string, data: array<string, mixed>}
+     *     content: array{type: ContentType|string, data?: array<string, mixed>}
      * } $input
      *
      * If `message_id` is omitted a UUIDv4 is generated. The value actually sent
      * is available as `$envelope->metadata['message_id']`.
+     * @return Envelope<mixed>
      */
     public function send(array $input): Envelope
     {
         $messageId = $input['message_id'] ?? self::uuid4();
         $channel = $input['channel'] instanceof Channel ? $input['channel']->value : $input['channel'];
-        $type = ($input['content']['type'] ?? null) instanceof ContentType
+        $type = $input['content']['type'] instanceof ContentType
             ? $input['content']['type']->value
-            : ($input['content']['type'] ?? null);
+            : $input['content']['type'];
 
         $body = self::compact([
             'message_id' => $messageId,
@@ -58,11 +59,13 @@ final class Messages extends AbstractResource
         );
     }
 
+    /** @return Envelope<mixed> */
     public function list(): Envelope
     {
         return $this->http->request('GET', '/api/v1/messages');
     }
 
+    /** @return Envelope<mixed> */
     public function get(string $messageId): Envelope
     {
         return $this->http->request('GET', '/api/v1/messages/' . rawurlencode($messageId));

@@ -10,7 +10,7 @@ namespace Plasgos\CrmSdk;
  */
 final class TemplateContent implements \JsonSerializable
 {
-    /** @var list<array{param: string, type: string, value: string}> */
+    /** @var list<array{param: string, type: 'custom'|'dynamic', value: string}> */
     private array $variables = [];
 
     /** @var array{latitude: float, longitude: float, name: ?string, address: ?string}|null */
@@ -40,7 +40,7 @@ final class TemplateContent implements \JsonSerializable
         return $this;
     }
 
-    /** @return array{type: string, template: array<string, mixed>} */
+    /** @return array{type: 'template', template: array{template_id: string, variables: list<array{param: string, type: 'custom'|'dynamic', value: string}>, location?: array{latitude: float, longitude: float, name: ?string, address: ?string}}} */
     public function toArray(): array
     {
         $template = ['template_id' => $this->templateId, 'variables' => $this->variables];
@@ -50,12 +50,13 @@ final class TemplateContent implements \JsonSerializable
         return ['type' => 'template', 'template' => $template];
     }
 
-    /** @return array{type: string, template: array<string, mixed>} */
+    /** @return array{type: 'template', template: array{template_id: string, variables: list<array{param: string, type: 'custom'|'dynamic', value: string}>, location?: array{latitude: float, longitude: float, name: ?string, address: ?string}}} */
     public function jsonSerialize(): array
     {
         return $this->toArray();
     }
 
+    /** @param 'custom'|'dynamic' $type */
     private function variable(string $param, string $type, string $value): self
     {
         foreach ($this->variables as $i => $existing) {

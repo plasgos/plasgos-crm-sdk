@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Legacy\Resource;
 
+use Plasgos\CrmSdk\Http\Json;
 use Plasgos\CrmSdk\Legacy\Http\HttpClient;
 
 abstract class AbstractResource
@@ -24,9 +25,20 @@ abstract class AbstractResource
                 continue;
             }
             $out[$key] = is_array($value) && ! array_is_list($value)
-                ? self::compact($value)
+                ? self::compact(Json::object($value) ?? [])
                 : $value;
         }
         return $out;
+    }
+
+    /**
+     * Query string values with nulls dropped.
+     *
+     * @param array<string, scalar|null> $params
+     * @return array<string, scalar>
+     */
+    protected static function query(array $params): array
+    {
+        return array_filter($params, static fn (mixed $value): bool => $value !== null);
     }
 }

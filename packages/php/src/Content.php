@@ -17,39 +17,42 @@ use Plasgos\CrmSdk\Enum\ContentType;
  */
 final class Content
 {
-    /** @return array{type: string, text: array{body: string, preview_url: bool}} */
+    /** @return array{type: 'text', text: array{body: string, preview_url: bool}} */
     public static function text(string $body, bool $previewUrl = false): array
     {
         return ['type' => ContentType::Text->value, 'text' => ['body' => $body, 'preview_url' => $previewUrl]];
     }
 
-    /** @return array{type: string, media: array{url: string, caption: ?string, file_name: ?string, mime_type: ?string}} */
+    /** @return array{type: 'audio'|'document'|'image'|'video', media: array{url: string, caption: ?string, file_name: ?string, mime_type: ?string}} */
     public static function media(ContentType|string $type, string $url, ?string $caption = null, ?string $fileName = null, ?string $mimeType = null): array
     {
-        $type = $type instanceof ContentType ? $type : ContentType::tryFrom($type);
-        if ($type === null || ! $type->isMedia()) {
-            throw new \InvalidArgumentException('Content::media type must be one of image, video, audio, document');
-        }
+        $value = match ($type instanceof ContentType ? $type : ContentType::tryFrom($type)) {
+            ContentType::Image => 'image',
+            ContentType::Video => 'video',
+            ContentType::Audio => 'audio',
+            ContentType::Document => 'document',
+            default => throw new \InvalidArgumentException('Content::media type must be one of image, video, audio, document'),
+        };
 
         return [
-            'type' => $type->value,
+            'type' => $value,
             'media' => ['url' => $url, 'caption' => $caption, 'file_name' => $fileName, 'mime_type' => $mimeType],
         ];
     }
 
-    /** @return array{type: string, media: array<string, ?string>} */
+    /** @return array{type: 'audio'|'document'|'image'|'video', media: array{url: string, caption: ?string, file_name: ?string, mime_type: ?string}} */
     public static function image(string $url, ?string $caption = null): array
     {
         return self::media(ContentType::Image, $url, $caption);
     }
 
-    /** @return array{type: string, media: array<string, ?string>} */
+    /** @return array{type: 'audio'|'document'|'image'|'video', media: array{url: string, caption: ?string, file_name: ?string, mime_type: ?string}} */
     public static function video(string $url, ?string $caption = null): array
     {
         return self::media(ContentType::Video, $url, $caption);
     }
 
-    /** @return array{type: string, media: array<string, ?string>} */
+    /** @return array{type: 'audio'|'document'|'image'|'video', media: array{url: string, caption: ?string, file_name: ?string, mime_type: ?string}} */
     public static function document(string $url, ?string $fileName = null, ?string $caption = null): array
     {
         return self::media(ContentType::Document, $url, $caption, $fileName);

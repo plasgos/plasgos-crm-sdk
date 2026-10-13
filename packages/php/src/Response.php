@@ -6,11 +6,18 @@ namespace Plasgos\CrmSdk;
 
 /**
  * Successful API v3 response: `{ success: true, message, data, meta }`.
+ *
+ * Resource methods name the types of `data` and `meta` per operation, generated from OpenAPI
+ * ({@see \Plasgos\CrmSdk\Types\ApiTypes}), e.g. `Response<GetContactData, GetContactMeta>`.
+ *
+ * @template-covariant TData
+ * @template-covariant TMeta of array<string, mixed> = array<string, mixed>
  */
 final class Response
 {
     /**
-     * @param array<string, mixed> $meta
+     * @param TData $data
+     * @param TMeta $meta
      * @param array{limit: ?int, remaining: ?int, reset: ?int} $rateLimit
      * @param array<string, string> $headers lower-cased header name => value
      */

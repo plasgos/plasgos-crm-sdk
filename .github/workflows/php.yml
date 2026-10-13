@@ -7,12 +7,16 @@ on:
       - "packages/php/**"
       - "docs/vectors.json"
       - "docs/vectors-v3.json"
+      - "openapi/openapi-v3.json"
+      - "scripts/generate-types.mjs"
       - ".github/workflows/php.yml"
   pull_request:
     paths:
       - "packages/php/**"
       - "docs/vectors.json"
       - "docs/vectors-v3.json"
+      - "openapi/openapi-v3.json"
+      - "scripts/generate-types.mjs"
       - ".github/workflows/php.yml"
 
 defaults:
@@ -42,3 +46,8 @@ jobs:
           restore-keys: composer-${{ matrix.php }}-
       - run: composer install --no-interaction --prefer-dist
       - run: composer test
+      - name: PHPStan (level max, termasuk tipe API v3 di tests/Types)
+        run: composer analyse
+      - name: Tipe sinkron dengan openapi-v3.json
+        if: ${{ matrix.php == '8.3' }}
+        run: node ../../scripts/generate-types.mjs --check

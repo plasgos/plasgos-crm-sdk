@@ -11,10 +11,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - Malformed `contact` → `422 validation_failed` with field code `invalid_contact`. Error catalog: `components.x-error-codes` in `openapi/openapi-v3.json`.
 
 ### Fixed
+- `contactGroups->list()` with `RequestOptions` no longer fails with a `TypeError` (missing import; found by PHPStan).
+- `LegacyClient`: an error response whose `status` is not an int or string (e.g. `true`) raised a PHP `TypeError` instead of the SDK exception.
 - `409 idempotency_in_progress` is retried with the same Idempotency-Key (the first request is still running, e.g. after a client-side timeout); other 409s such as `identity_taken` are still raised.
 - An empty `custom_fields` (PHP decodes `{}` as `[]`) is sent as a JSON object, so `contacts->update($id, ['custom_fields' => $contact->data['custom_fields']])` no longer fails with 422.
 
 ### Added
+- Types generated from `openapi/openapi-v3.json` (`scripts/generate-types.mjs`, checked in CI) as PHPStan/Psalm array shapes: `Plasgos\CrmSdk\Types\ApiTypes` holds one `@phpstan-type` per schema plus `…Query`, `…Body`, `…Data`, `…Item`, `…Meta` per operation. `Response` and `Page` are generic (`Response<GetContactData, GetContactMeta>`, `Page<ListContactsItem>`); every resource method is typed. `Content` / `TemplateContent` builders return literal shapes (`type: 'text'`, …) that match those types.
+- PHPStan at level max in CI (`composer analyse`), including `tests/Types` where type assertions check what integrators see.
 - `ClientConfig(logger:)` takes a PSR-3 logger (docs/SDK_SPEC.md §1.2; new dependency `psr/log`, interfaces only): one `debug` record per attempt with method, path (no query), status, duration, request id, error code and retry wait; never headers or bodies.
 - Per-call options (`RequestOptions`, docs/SDK_SPEC.md §1.1) as the last argument of every resource method and `$client->request()`: `timeout` (default Guzzle transport; a custom PSR-18 client gets a `LogicException`), `maxRetries`, `headers`. Next pages of `autoPaging()` keep them. Headers the SDK owns (signing, `Idempotency-Key`, `Content-Type`, …) are rejected.
 - `Client` for **API Integrasi v3** (`/api/v3`).

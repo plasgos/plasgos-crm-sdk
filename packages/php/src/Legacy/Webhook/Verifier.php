@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plasgos\CrmSdk\Legacy\Webhook;
 
 use Plasgos\CrmSdk\Exception\WebhookVerificationException;
+use Plasgos\CrmSdk\Http\Json;
 use Psr\Http\Message\ServerRequestInterface;
 
 final class Verifier
@@ -19,7 +20,7 @@ final class Verifier
      * `verify_token` in the `x-hub-token` header. This compares that header with
      * `hash_equals()` and decodes the JSON body.
      *
-     * @param array<string, string|list<string>> $headers  header name => value(s)
+     * @param array<array-key, string|array<string>> $headers  header name => value(s), e.g. PSR-7 `getHeaders()`
      * @return array<string, mixed>
      */
     public static function verify(array $headers, string $rawBody, ?string $expectedToken = null): array
@@ -37,11 +38,12 @@ final class Verifier
             throw new WebhookVerificationException('Webhook verification failed: body is not valid JSON', 0, $e);
         }
 
-        if (! is_array($decoded)) {
+        $event = Json::object($decoded);
+        if ($event === null) {
             throw new WebhookVerificationException('Webhook verification failed: body is not an object');
         }
 
-        return $decoded;
+        return $event;
     }
 
     /**
@@ -55,13 +57,13 @@ final class Verifier
     }
 
     /**
-     * @param array<string, string|list<string>> $headers
+     * @param array<array-key, string|array<string>> $headers
      */
     private static function header(array $headers, string $name): ?string
     {
         foreach ($headers as $key => $value) {
-            if (strtolower($key) === strtolower($name)) {
-                return is_array($value) ? ($value[0] ?? null) : $value;
+            if (strtolower((string) $key) === strtolower($name)) {
+                return is_array($value) ? (reset($value) ?: null) : $value;
             }
         }
         return null;

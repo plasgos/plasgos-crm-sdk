@@ -227,9 +227,10 @@ drift from the API.
 
 | | Node | Python | PHP |
 |---|---|---|---|
-| Schemas | `Types.Contact`, `Types.Message`, … (`export type * as Types`) | `plasgos_crm.v3.types` (`TypedDict`) | arrays (wire format) |
-| Per operation | `Types.Operations["sendMessage"]` → `query`, `body`, `data`, `meta` (+ `item` for lists) | `SendMessageBody`, `ListContactsQuery`, `GetContactData`, `ListContactsItem`, `SendMessageMeta` | — |
-| Resource methods | params, body, `ApiResponse<data, meta>` and `Page<item>` typed | params, body, `ApiResponse[Data]` and `Page[Item]` typed | — |
+| Schemas | `Types.Contact`, `Types.Message`, … (`export type * as Types`) | `plasgos_crm.v3.types` (`TypedDict`) | `@phpstan-type` aliases on `Plasgos\CrmSdk\Types\ApiTypes` (array shapes) |
+| Per operation | `Types.Operations["sendMessage"]` → `query`, `body`, `data`, `meta` (+ `item` for lists) | `SendMessageBody`, `ListContactsQuery`, `GetContactData`, `ListContactsItem`, `SendMessageMeta` | same names as Python, as aliases |
+| Resource methods | params, body, `ApiResponse<data, meta>` and `Page<item>` typed | params, body, `ApiResponse[Data]` and `Page[Item]` typed | params, body, `Response<Data, Meta>` and `Page<Item>` typed (generic `@template`) |
+| Checked in CI | `tsc` + `expectTypeOf` | `mypy --strict` (`tests/test_v3_types.py`, `tests/test_v3_async.py`) | PHPStan level max (`src`, `tests/Types`) |
 
 Fields that take a content builder (`content` of `messages.send` and `broadcasts.create`) also accept
 `TemplateContent`. Python `Content.text()` / `media()` return the matching `TypedDict`.

@@ -93,6 +93,11 @@ $r->rateLimit;   // ['limit' => 120, 'remaining' => 119, 'reset' => 42]
 $r->replayed;    // true when the server replayed the first response for this Idempotency-Key
 ```
 
+`data` and `meta` are typed per operation for PHPStan/Psalm and IDEs: types are generated from
+OpenAPI as array shapes in `Plasgos\CrmSdk\Types\ApiTypes` (`Response<GetContactData, GetContactMeta>`,
+`Page<ListContactsItem>`, bodies such as `SendMessageBody`). Use a schema in your own code with
+`@phpstan-import-type Contact from \Plasgos\CrmSdk\Types\ApiTypes`.
+
 List methods return a `Page`, which provides:
 
 - `->items` and `->pagination`
@@ -180,6 +185,7 @@ the `Legacy\Envelope` response type. See [docs/SDK_SPEC_LEGACY_V1.md](../../docs
 ```bash
 composer install
 composer test
+composer analyse   # PHPStan level max
 # optional smoke test against a real server:
 PLASGOS_LIVE_BASE_URL=https://api-crm.sandbox.plasgos.co.id PLASGOS_LIVE_API_KEY=… PLASGOS_LIVE_SECRET_KEY=… composer test -- --filter LiveTest
 ```

@@ -3,13 +3,14 @@
  * Bangkitkan tipe API v3 dari `openapi/openapi-v3.json` (sumber kebenaran = api-crm):
  *   - packages/node/src/v3/types.gen.ts          (TypeScript)
  *   - packages/python/src/plasgos_crm/v3/types.py (TypedDict, Python ≥ 3.9)
+ *   - packages/php/src/Types/ApiTypes.php         (alias @phpstan-type / array shape)
  *
  *   node scripts/generate-types.mjs           tulis berkas
  *   node scripts/generate-types.mjs --check   gagal (exit 1) bila berkas tidak sinkron dengan spesifikasi (CI)
  *
  * Per operasi (operationId) dihasilkan: query, body, `data`, dan `meta` respons sukses.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -378,12 +379,165 @@ function renderPy(ops) {
   return out.join("\n").replace(/\n{4,}/g, "\n\n\n") + (out[out.length - 1] === "" ? "" : "\n");
 }
 
+// ———————————————————————————————————————— PHP (alias @phpstan-type, array shape)
+
+const TEMPLATE_CONTENT_PHP = "\\Plasgos\\CrmSdk\\TemplateContent";
+const phpLiteral = (value) =>
+  value === null ? "null" : typeof value === "string" ? `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'` : String(value);
+const phpUnion = (parts) => [...new Set(parts.flatMap((p) => p.split("|")))].join("|");
+/** Bagian `|` di tingkat teratas saja (shape bersarang tidak dipecah). */
+const splitTop = (text) => {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "{" || c === "<" || c === "(") depth++;
+    else if (c === "}" || c === ">" || c === ")") depth--;
+    else if (c === "|" && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return [...parts, text.slice(start)];
+};
+const phpJoin = (types) => [...new Set(types.flatMap(splitTop))].join("|");
+
+function php(input, indent = "", owner = null) {
+  const schema = typed(input);
+  if (!schema || Object.keys(schema).length === 0) return "mixed";
+  if (schema.$ref) return refName(schema.$ref);
+  if ("const" in schema) return phpLiteral(schema.const);
+  if (schema.enum) return phpJoin(schema.enum.map(phpLiteral));
+  if (schema.oneOf || schema.anyOf) return phpJoin((schema.oneOf ?? schema.anyOf).map((s) => php(s, indent)));
+  if (schema.allOf) return phpAllOf(schema, indent, owner);
+  const types = typesOf(schema);
+  if (types.length > 1) return phpJoin(types.map((t) => php({ ...schema, type: t }, indent, owner)));
+  switch (types[0]) {
+    case "null": return "null";
+    case "string": return "string";
+    case "integer": return "int";
+    case "number": return "float|int";
+    case "boolean": return "bool";
+    case "array": return `list<${php(schema.items ?? {}, indent)}>`;
+    case "object": return phpObject(schema, indent, owner);
+    default: return schema.properties ? phpObject(schema, indent, owner) : "mixed";
+  }
+}
+
+/** PHPStan tidak menggabung irisan array shape: bagian `allOf` berbentuk objek diratakan jadi satu shape. */
+function phpAllOf(schema, indent, owner) {
+  const merged = { properties: { ...(schema.properties ?? {}) }, required: [...(schema.required ?? [])] };
+  for (const part of schema.allOf) {
+    const target = typed(deref(part));
+    if (!target || !isObjectSchema(target) || target.oneOf || target.anyOf) {
+      if (schema.allOf.length === 1 && !schema.properties) return php(part, indent, owner);
+      continue;
+    }
+    if (target.allOf) {
+      const inner = phpAllOfParts(target);
+      Object.assign(merged.properties, inner.properties);
+      merged.required.push(...inner.required);
+    }
+    Object.assign(merged.properties, target.properties ?? {});
+    merged.required.push(...(target.required ?? []));
+  }
+  return phpObject(merged, indent, owner);
+}
+function phpAllOfParts(schema) {
+  const out = { properties: {}, required: [] };
+  for (const part of schema.allOf ?? []) {
+    const target = typed(deref(part));
+    if (!target || !isObjectSchema(target)) continue;
+    if (target.allOf) {
+      const inner = phpAllOfParts(target);
+      Object.assign(out.properties, inner.properties);
+      out.required.push(...inner.required);
+    }
+    Object.assign(out.properties, target.properties ?? {});
+    out.required.push(...(target.required ?? []));
+  }
+  return out;
+}
+
+function phpObject(schema, indent, owner = null) {
+  const props = Object.entries(schema.properties ?? {});
+  const extra = schema.additionalProperties;
+  if (!props.length) return `array<string, ${extra && extra !== true ? php(extra, indent) : "mixed"}>`;
+  const inner = indent + "  ";
+  const required = new Set(schema.required ?? []);
+  const lines = props.map(([key, value]) => {
+    const type = php(value, inner) + (acceptsBuilder(owner, key) ? `|${TEMPLATE_CONTENT_PHP}` : "");
+    return `${inner}${/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : phpLiteral(key)}${required.has(key) ? "" : "?"}: ${type},`;
+  });
+  return `array{\n${lines.join("\n")}\n${indent}}`;
+}
+
+function phpQuery(params) {
+  if (!params.length) return "array<string, never>";
+  return phpObject({ properties: Object.fromEntries(params.map((p) => [p.name, p.schema ?? {}])) }, "");
+}
+
+function phpMeta(meta) {
+  const base = typed(deref(schemas.Meta));
+  const properties = { ...(base.properties ?? {}) };
+  const required = [...(base.required ?? [])];
+  for (const [key, { schema, required: isRequired }] of Object.entries(meta)) {
+    properties[key] = schema;
+    if (isRequired) required.push(key);
+  }
+  return phpObject({ properties, required }, "");
+}
+
+function renderPhp(ops) {
+  const aliases = [];
+  for (const [name, schema] of Object.entries(schemas)) {
+    if (isEnvelopeType(name)) continue;
+    aliases.push([schemaName(name), php(schema, "", name)]);
+  }
+  for (const op of ops) {
+    const base = pascal(op.id);
+    aliases.push([`${base}Query`, phpQuery(op.query)]);
+    if (op.body) aliases.push([`${base}Body`, php(op.body, "", op.body.$ref ? refName(op.body.$ref) : null)]);
+    aliases.push([`${base}Data`, op.data ? php(op.data) : "mixed"]);
+    if (op.list) aliases.push([`${base}Item`, op.data?.items ? php(op.data.items) : "mixed"]);
+    aliases.push([`${base}Meta`, phpMeta(op.meta)]);
+  }
+  const doc = aliases.map(([alias, type]) => ` * @phpstan-type ${alias} ${type.replace(/\n/g, "\n * ")}`);
+  return [
+    "<?php",
+    "",
+    `// ${HEADER_NOTE}`,
+    `// API ${spec.info.version}`,
+    "",
+    "declare(strict_types=1);",
+    "",
+    "namespace Plasgos\\CrmSdk\\Types;",
+    "",
+    "/**",
+    " * Tipe API v3 sebagai alias PHPStan/Psalm: format kabel (snake_case), sama dengan `Response::$data`.",
+    " * Per operasi: `…Query`, `…Body`, `…Data`, `…Item` (daftar) dan `…Meta`.",
+    " * Pakai di docblock kelas Anda: `@phpstan-import-type Contact from \\Plasgos\\CrmSdk\\Types\\ApiTypes`.",
+    " *",
+    ...doc,
+    " */",
+    "final class ApiTypes",
+    "{",
+    "    private function __construct()",
+    "    {",
+    "    }",
+    "}",
+    "",
+  ].join("\n");
+}
+
 // ———————————————————————————————————————— Tulis / periksa
 
 const ops = operations();
 const targets = [
   [join(ROOT, "packages/node/src/v3/types.gen.ts"), renderTs(ops)],
   [join(ROOT, "packages/python/src/plasgos_crm/v3/types.py"), renderPy(ops)],
+  [join(ROOT, "packages/php/src/Types/ApiTypes.php"), renderPhp(ops)],
 ];
 const check = process.argv.includes("--check");
 let stale = 0;
@@ -393,6 +547,7 @@ for (const [file, content] of targets) {
   if (check) {
     if (current !== content) { console.error(`✘ tidak sinkron dengan openapi-v3.json: ${file} — jalankan node scripts/generate-types.mjs`); stale++; }
   } else if (current !== content) {
+    mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, content);
     console.log(`✔ ditulis ${file}`);
   }

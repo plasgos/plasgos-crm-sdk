@@ -10,6 +10,7 @@ packages/php/vendor/
 packages/php/composer.lock
 .phpunit.result.cache
 .phpunit.cache/
+.phpstan-cache/
 
 # Python
 packages/python/dist/

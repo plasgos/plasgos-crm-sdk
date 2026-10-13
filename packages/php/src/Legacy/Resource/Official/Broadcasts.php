@@ -20,6 +20,7 @@ final class Broadcasts extends AbstractResource
      *     location?: array<string, mixed>,
      *     recipients: list<array{phone_number: string, attachment?: array<string, mixed>}>
      * } $input
+     * @return Envelope<mixed>
      */
     public function create(array $input): Envelope
     {
@@ -42,10 +43,11 @@ final class Broadcasts extends AbstractResource
 
     /**
      * @param array{page?: int, limit?: int, status?: string, search?: string} $params
+     * @return Envelope<mixed>
      */
     public function list(array $params = []): Envelope
     {
-        return $this->http->request('GET', '/api/v1/official/broadcasts', query: self::compact([
+        return $this->http->request('GET', '/api/v1/official/broadcasts', query: self::query([
             'page' => $params['page'] ?? null,
             'limit' => $params['limit'] ?? null,
             'status' => $params['status'] ?? null,
@@ -53,6 +55,7 @@ final class Broadcasts extends AbstractResource
         ]));
     }
 
+    /** @return Envelope<mixed> */
     public function monitoring(string $broadcastId): Envelope
     {
         return $this->http->request(

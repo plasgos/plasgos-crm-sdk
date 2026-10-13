@@ -23,6 +23,7 @@ final class Messages extends AbstractResource
      *         }
      *     }
      * } $input
+     * @return Envelope<mixed>
      */
     public function sendTemplate(array $input): Envelope
     {

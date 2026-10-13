@@ -7,14 +7,39 @@ namespace Plasgos\CrmSdk\Resource;
 use Plasgos\CrmSdk\Page;
 use Plasgos\CrmSdk\RequestOptions;
 use Plasgos\CrmSdk\Response;
+use Plasgos\CrmSdk\Types\ApiTypes;
 
-/** `$client->contacts` — scopes `contacts:read` / `contacts:write`. */
+/**
+ * `$client->contacts` — scopes `contacts:read` / `contacts:write`.
+ *
+ * @phpstan-import-type ListContactsQuery from ApiTypes
+ * @phpstan-import-type ListContactsItem from ApiTypes
+ * @phpstan-import-type LookupContactQuery from ApiTypes
+ * @phpstan-import-type LookupContactData from ApiTypes
+ * @phpstan-import-type LookupContactMeta from ApiTypes
+ * @phpstan-import-type CreateContactBody from ApiTypes
+ * @phpstan-import-type CreateContactData from ApiTypes
+ * @phpstan-import-type CreateContactMeta from ApiTypes
+ * @phpstan-import-type UpsertContactBody from ApiTypes
+ * @phpstan-import-type UpsertContactData from ApiTypes
+ * @phpstan-import-type UpsertContactMeta from ApiTypes
+ * @phpstan-import-type GetContactData from ApiTypes
+ * @phpstan-import-type GetContactMeta from ApiTypes
+ * @phpstan-import-type UpdateContactBody from ApiTypes
+ * @phpstan-import-type UpdateContactData from ApiTypes
+ * @phpstan-import-type UpdateContactMeta from ApiTypes
+ */
 final class Contacts extends AbstractResource
 {
-    /** @param array{search?: string, group_id?: string, tag?: string, updated_from?: string, page?: int, per_page?: int} $params */
+    /**
+     * @param ListContactsQuery $params
+     * @return Page<ListContactsItem>
+     */
     public function list(array $params = [], ?RequestOptions $options = null): Page
     {
-        return $this->http->requestPage('/contacts', $params, $options);
+        /** @var Page<ListContactsItem> $page */
+        $page = $this->http->requestPage('/contacts', $params, $options);
+        return $page;
     }
 
     /**
@@ -22,43 +47,63 @@ final class Contacts extends AbstractResource
      * Not found → NotFoundException. `meta['matched_by']`; merged contacts resolve to their target
      * (`meta['redirected_from']`).
      *
-     * @param array{phone_number?: string, email?: string, channel?: string, external_id?: string, endpoint_id?: string} $by
+     * @param LookupContactQuery $by
+     * @return Response<LookupContactData, LookupContactMeta>
      */
     public function lookup(array $by, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('GET', '/contacts/lookup', $by, options: $options);
+        /** @var Response<LookupContactData, LookupContactMeta> $response */
+        $response = $this->http->request('GET', '/contacts/lookup', $by, options: $options);
+        return $response;
     }
 
     /**
      * Existing phone/email → ConflictException `identity_taken` (see ->details['contact_id']).
      *
-     * @param array<string, mixed> $contact
+     * @param CreateContactBody $contact
+     * @return Response<CreateContactData, CreateContactMeta>
      */
     public function create(array $contact, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('POST', '/contacts', body: $contact, idempotencyKey: $idempotencyKey, options: $options);
+        /** @var Response<CreateContactData, CreateContactMeta> $response */
+        $response = $this->http->request('POST', '/contacts', body: $contact, idempotencyKey: $idempotencyKey, options: $options);
+        return $response;
     }
 
     /**
      * Create (201) or update (200); `meta['created']` is true | false.
      * Tags and group ids are ADDED, never replaced.
      *
-     * @param array<string, mixed> $contact may include `match_on` = phone_number | email
+     * @param UpsertContactBody $contact may include `match_on` = phone_number | email
+     * @return Response<UpsertContactData, UpsertContactMeta>
      */
     public function upsert(array $contact, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('POST', '/contacts/upsert', body: $contact, idempotencyKey: $idempotencyKey, options: $options);
+        /** @var Response<UpsertContactData, UpsertContactMeta> $response */
+        $response = $this->http->request('POST', '/contacts/upsert', body: $contact, idempotencyKey: $idempotencyKey, options: $options);
+        return $response;
     }
 
-    /** A merged (source) contact id returns the target contact with `meta['redirected_from']`. */
+    /**
+     * A merged (source) contact id returns the target contact with `meta['redirected_from']`.
+     *
+     * @return Response<GetContactData, GetContactMeta>
+     */
     public function get(string $contactId, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('GET', self::path('contacts', $contactId), options: $options);
+        /** @var Response<GetContactData, GetContactMeta> $response */
+        $response = $this->http->request('GET', self::path('contacts', $contactId), options: $options);
+        return $response;
     }
 
-    /** @param array<string, mixed> $changes `tags` / `group_ids` take `['add' => [], 'remove' => []]` */
+    /**
+     * @param UpdateContactBody $changes `tags` / `group_ids` take `['add' => [], 'remove' => []]`
+     * @return Response<UpdateContactData, UpdateContactMeta>
+     */
     public function update(string $contactId, array $changes, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('PATCH', self::path('contacts', $contactId), body: $changes, options: $options);
+        /** @var Response<UpdateContactData, UpdateContactMeta> $response */
+        $response = $this->http->request('PATCH', self::path('contacts', $contactId), body: $changes, options: $options);
+        return $response;
     }
 }
