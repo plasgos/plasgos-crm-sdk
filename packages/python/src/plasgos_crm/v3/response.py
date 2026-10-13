@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, Iterator, Optional, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, Optional, TypeVar
 
-__all__ = ["ApiResponse", "Page", "RateLimit"]
+__all__ = ["ApiResponse", "AsyncPage", "Page", "RateLimit"]
 
 T = TypeVar("T")
 
@@ -37,18 +37,9 @@ class ApiResponse(Generic[T]):
         return self.headers.get(name.lower())
 
 
-class Page(Generic[T]):
-    """A list result (docs/SDK_SPEC.md §4.2).
-
-    ::
-
-        for contact in client.contacts.list(per_page=100).auto_paging():
-            ...
-    """
-
-    def __init__(self, response: ApiResponse[Any], fetch_page: Callable[[int], "Page[T]"]) -> None:
+class _PageBase(Generic[T]):
+    def __init__(self, response: ApiResponse[Any]) -> None:
         self.response = response
-        self._fetch_page = fetch_page
         self.items: list[T] = list(response.data) if isinstance(response.data, list) else []
         raw = response.meta.get("pagination") if isinstance(response.meta.get("pagination"), dict) else {}
         assert isinstance(raw, dict)
@@ -64,6 +55,26 @@ class Page(Generic[T]):
     def has_next_page(self) -> bool:
         return bool(self.pagination["has_next_page"])
 
+    def __iter__(self) -> Iterator[T]:
+        return iter(self.items)
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+
+class Page(_PageBase[T]):
+    """A list result (docs/SDK_SPEC.md §4.2).
+
+    ::
+
+        for contact in client.contacts.list(per_page=100).auto_paging():
+            ...
+    """
+
+    def __init__(self, response: ApiResponse[Any], fetch_page: Callable[[int], "Page[T]"]) -> None:
+        super().__init__(response)
+        self._fetch_page = fetch_page
+
     def next_page(self) -> Optional["Page[T]"]:
         return self._fetch_page(int(self.pagination["page"]) + 1) if self.has_next_page() else None
 
@@ -74,8 +85,28 @@ class Page(Generic[T]):
             yield from page.items
             page = page.next_page()
 
-    def __iter__(self) -> Iterator[T]:
-        return iter(self.items)
 
-    def __len__(self) -> int:
-        return len(self.items)
+class AsyncPage(_PageBase[T]):
+    """A list result of :class:`~plasgos_crm.AsyncClient` (docs/SDK_SPEC.md §4.2).
+
+    ::
+
+        page = await client.contacts.list(per_page=100)
+        async for contact in page.auto_paging():
+            ...
+    """
+
+    def __init__(self, response: ApiResponse[Any], fetch_page: Callable[[int], Awaitable["AsyncPage[T]"]]) -> None:
+        super().__init__(response)
+        self._fetch_page = fetch_page
+
+    async def next_page(self) -> Optional["AsyncPage[T]"]:
+        return await self._fetch_page(int(self.pagination["page"]) + 1) if self.has_next_page() else None
+
+    async def auto_paging(self) -> AsyncIterator[T]:
+        """Every item of every page, fetching the next page lazily."""
+        page: Optional[AsyncPage[T]] = self
+        while page is not None:
+            for item in page.items:
+                yield item
+            page = await page.next_page()

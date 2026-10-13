@@ -11,7 +11,8 @@ import random
 import re
 import time
 import uuid
-from typing import Any, Callable, Mapping, Optional, TypedDict, Union
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Mapping, Optional, TypedDict, Union
 from urllib.parse import quote
 
 import httpx
@@ -25,10 +26,10 @@ from ..errors import (
     TransportError,
     error_from_v3,
 )
-from .response import ApiResponse, Page, RateLimit
+from .response import ApiResponse, AsyncPage, Page, RateLimit
 from .signature import signature_headers_v3
 
-__all__ = ["ApiClient", "RequestOptions", "parse", "build_query", "segment", "QueryValue", "Query"]
+__all__ = ["ApiClient", "AsyncApiClient", "RequestOptions", "parse", "build_query", "segment", "QueryValue", "Query"]
 
 QueryValue = Union[str, int, float, bool, None]
 Query = Mapping[str, QueryValue]
@@ -63,7 +64,23 @@ _RETRY_CAP = 8.0
 _SCHEME_HOST = re.compile(r"^[a-z][a-z0-9+.-]*://[^/]+", re.IGNORECASE)
 
 
-class ApiClient:
+@dataclass(frozen=True)
+class _Call:
+    """One SDK call, prepared once and reused by every attempt."""
+
+    method: str
+    url: str
+    request_target: str
+    raw_body: bytes
+    idempotency_key: Optional[str]
+    options: RequestOptions
+    max_retries: int
+    log_path: str
+
+
+class _BaseApiClient:
+    """Signing, idempotency, retry policy and logging shared by the sync and async clients."""
+
     def __init__(
         self,
         *,
@@ -73,11 +90,7 @@ class ApiClient:
         user_agent: str,
         max_retries: int,
         max_retry_wait: float,
-        timeout: float,
-        sleeper: Callable[[float], None],
         clock: Callable[[], int],
-        transport: Optional[httpx.BaseTransport] = None,
-        http_client: Optional[httpx.Client] = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
@@ -85,80 +98,63 @@ class ApiClient:
         self._user_agent = user_agent
         self._max_retries = max_retries
         self._max_retry_wait = max_retry_wait
-        self._sleeper = sleeper
         self._clock = clock
-        self._owns_client = http_client is None
-        self._client = http_client or httpx.Client(timeout=timeout, transport=transport, follow_redirects=False)
 
-    def close(self) -> None:
-        if self._owns_client:
-            self._client.close()
-
-    def request(
+    def _prepare(
         self,
         method: str,
         path: str,
-        query: Optional[Query] = None,
-        body: Any = None,
-        idempotency_key: Optional[str] = None,
-        options: Optional[RequestOptions] = None,
-    ) -> ApiResponse[Any]:
+        query: Optional[Query],
+        body: Any,
+        idempotency_key: Optional[str],
+        options: Optional[RequestOptions],
+    ) -> _Call:
         opts = _check_options(options)
         verb = method.upper()
         query_string = build_query(query or {})
         url = f"{self._base_url}{PREFIX}/{path.lstrip('/')}" + (f"?{query_string}" if query_string else "")
         # Path + query exactly as sent — including any sub-path of a custom base URL.
         request_target = _SCHEME_HOST.sub("", url) or "/"
-        # Serialised ONCE: the exact bytes signed are the bytes sent.
-        raw_body = b"" if body is None else _encode_body(body)
-        # One key per intent: generated once here and reused by every retry.
-        key = idempotency_key if idempotency_key is not None else (str(uuid.uuid4()) if verb == "POST" else None)
-        max_retries = opts.get("max_retries", self._max_retries)
-        log_path = request_target.split("?", 1)[0]
+        return _Call(
+            method=verb,
+            url=url,
+            request_target=request_target,
+            # Serialised ONCE: the exact bytes signed are the bytes sent.
+            raw_body=b"" if body is None else _encode_body(body),
+            # One key per intent: generated once here and reused by every retry.
+            idempotency_key=idempotency_key if idempotency_key is not None else (str(uuid.uuid4()) if verb == "POST" else None),
+            options=opts,
+            max_retries=opts.get("max_retries", self._max_retries),
+            log_path=request_target.split("?", 1)[0],
+        )
 
-        attempt = 0
-        while True:
-            started = time.monotonic()
-            try:
-                response = self._attempt(verb, url, request_target, raw_body, key, opts)
-            except PlasgosApiError as error:
-                wait = self._retry_wait(error, verb, attempt, max_retries)
-                _log_attempt(verb, log_path, attempt, started, error.http_status or None, error.request_id, error.error_code, wait)
-                if wait is None:
-                    raise
-                self._sleeper(wait)
-                attempt += 1
-            else:
-                _log_attempt(verb, log_path, attempt, started, response.http_status, response.request_id, None, None)
-                return response
-
-    def request_page(self, path: str, query: Optional[Query] = None, options: Optional[RequestOptions] = None) -> Page[Any]:
-        params = dict(query or {})
-        response = self.request("GET", path, params, options=options)
-        return Page(response, lambda page: self.request_page(path, {**params, "page": page}, options))
-
-    def _attempt(
-        self, method: str, url: str, request_target: str, raw_body: bytes, idempotency_key: Optional[str], options: RequestOptions
-    ) -> ApiResponse[Any]:
+    def _send_args(self, call: _Call) -> dict[str, Any]:
+        """Keyword arguments for ``httpx.(Async)Client.request``; signed again on every attempt."""
         headers = {
             "Accept": "application/json",
             "User-Agent": self._user_agent,
-            **options.get("headers", {}),
-            **signature_headers_v3(self._api_key, self._secret_key, method, request_target, raw_body, self._clock()),
+            **call.options.get("headers", {}),
+            **signature_headers_v3(self._api_key, self._secret_key, call.method, call.request_target, call.raw_body, self._clock()),
         }
-        if idempotency_key is not None:
-            headers["Idempotency-Key"] = idempotency_key
-        if raw_body:
+        if call.idempotency_key is not None:
+            headers["Idempotency-Key"] = call.idempotency_key
+        if call.raw_body:
             headers["Content-Type"] = "application/json; charset=utf-8"
+        args: dict[str, Any] = {"content": call.raw_body or None, "headers": headers}
+        if "timeout" in call.options:
+            args["timeout"] = call.options["timeout"]
+        return args
 
-        extra: dict[str, Any] = {"timeout": options["timeout"]} if "timeout" in options else {}
-        try:
-            response = self._client.request(method, url, content=raw_body or None, headers=headers, **extra)
-        except httpx.TimeoutException as err:
-            raise TransportError(f"Request to {url} timed out", raw=err) from err
-        except httpx.HTTPError as err:
-            raise TransportError(f"Network error requesting {url}: {err}", raw=err) from err
-        return parse(response.status_code, {k.lower(): v for k, v in response.headers.items()}, response.text)
+    def _failed(self, call: _Call, attempt: int, started: float, error: PlasgosApiError) -> Optional[float]:
+        """Log a failed attempt; seconds to wait before retrying, or ``None`` to raise."""
+        wait = self._retry_wait(error, call.method, attempt, call.max_retries)
+        _log_attempt(call.method, call.log_path, attempt, started, error.http_status or None, error.request_id, error.error_code, wait)
+        return wait
+
+    @staticmethod
+    def _succeeded(call: _Call, attempt: int, started: float, response: ApiResponse[Any]) -> ApiResponse[Any]:
+        _log_attempt(call.method, call.log_path, attempt, started, response.http_status, response.request_id, None, None)
+        return response
 
     def _retry_wait(self, error: PlasgosApiError, method: str, attempt: int, max_retries: int) -> Optional[float]:
         """Seconds to wait before retrying, or ``None`` when this error is not retried (§6)."""
@@ -180,6 +176,160 @@ class ApiClient:
         if transient or (method == "GET" and isinstance(error, ServerError)):
             return _backoff(attempt)
         return None
+
+
+class ApiClient(_BaseApiClient):
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        secret_key: str,
+        user_agent: str,
+        max_retries: int,
+        max_retry_wait: float,
+        timeout: float,
+        sleeper: Callable[[float], None],
+        clock: Callable[[], int],
+        transport: Optional[httpx.BaseTransport] = None,
+        http_client: Optional[httpx.Client] = None,
+    ) -> None:
+        super().__init__(
+            base_url=base_url,
+            api_key=api_key,
+            secret_key=secret_key,
+            user_agent=user_agent,
+            max_retries=max_retries,
+            max_retry_wait=max_retry_wait,
+            clock=clock,
+        )
+        self._sleeper = sleeper
+        self._owns_client = http_client is None
+        self._client = http_client or httpx.Client(timeout=timeout, transport=transport, follow_redirects=False)
+
+    def close(self) -> None:
+        if self._owns_client:
+            self._client.close()
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        query: Optional[Query] = None,
+        body: Any = None,
+        idempotency_key: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+    ) -> ApiResponse[Any]:
+        call = self._prepare(method, path, query, body, idempotency_key, options)
+        attempt = 0
+        while True:
+            started = time.monotonic()
+            try:
+                response = self._attempt(call)
+            except PlasgosApiError as error:
+                wait = self._failed(call, attempt, started, error)
+                if wait is None:
+                    raise
+                self._sleeper(wait)
+                attempt += 1
+            else:
+                return self._succeeded(call, attempt, started, response)
+
+    def request_page(self, path: str, query: Optional[Query] = None, options: Optional[RequestOptions] = None) -> Page[Any]:
+        params = dict(query or {})
+        response = self.request("GET", path, params, options=options)
+        return Page(response, lambda page: self.request_page(path, {**params, "page": page}, options))
+
+    def _attempt(self, call: _Call) -> ApiResponse[Any]:
+        try:
+            response = self._client.request(call.method, call.url, **self._send_args(call))
+        except httpx.HTTPError as err:
+            raise _transport_error(call.url, err) from err
+        return _parse_response(response)
+
+
+class AsyncApiClient(_BaseApiClient):
+    """The same contract as :class:`ApiClient` over ``httpx.AsyncClient``."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        secret_key: str,
+        user_agent: str,
+        max_retries: int,
+        max_retry_wait: float,
+        timeout: float,
+        sleeper: Callable[[float], Awaitable[None]],
+        clock: Callable[[], int],
+        transport: Optional[httpx.AsyncBaseTransport] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
+    ) -> None:
+        super().__init__(
+            base_url=base_url,
+            api_key=api_key,
+            secret_key=secret_key,
+            user_agent=user_agent,
+            max_retries=max_retries,
+            max_retry_wait=max_retry_wait,
+            clock=clock,
+        )
+        self._sleeper = sleeper
+        self._owns_client = http_client is None
+        self._client = http_client or httpx.AsyncClient(timeout=timeout, transport=transport, follow_redirects=False)
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
+
+    async def request(
+        self,
+        method: str,
+        path: str,
+        query: Optional[Query] = None,
+        body: Any = None,
+        idempotency_key: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+    ) -> ApiResponse[Any]:
+        call = self._prepare(method, path, query, body, idempotency_key, options)
+        attempt = 0
+        while True:
+            started = time.monotonic()
+            try:
+                response = await self._attempt(call)
+            except PlasgosApiError as error:
+                wait = self._failed(call, attempt, started, error)
+                if wait is None:
+                    raise
+                await self._sleeper(wait)
+                attempt += 1
+            else:
+                return self._succeeded(call, attempt, started, response)
+
+    async def request_page(
+        self, path: str, query: Optional[Query] = None, options: Optional[RequestOptions] = None
+    ) -> AsyncPage[Any]:
+        params = dict(query or {})
+        response = await self.request("GET", path, params, options=options)
+        return AsyncPage(response, lambda page: self.request_page(path, {**params, "page": page}, options))
+
+    async def _attempt(self, call: _Call) -> ApiResponse[Any]:
+        try:
+            response = await self._client.request(call.method, call.url, **self._send_args(call))
+        except httpx.HTTPError as err:
+            raise _transport_error(call.url, err) from err
+        return _parse_response(response)
+
+
+def _transport_error(url: str, err: httpx.HTTPError) -> TransportError:
+    if isinstance(err, httpx.TimeoutException):
+        return TransportError(f"Request to {url} timed out", raw=err)
+    return TransportError(f"Network error requesting {url}: {err}", raw=err)
+
+
+def _parse_response(response: httpx.Response) -> ApiResponse[Any]:
+    return parse(response.status_code, {k.lower(): v for k, v in response.headers.items()}, response.text)
 
 
 def _log_attempt(

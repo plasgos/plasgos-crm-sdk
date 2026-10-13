@@ -67,6 +67,24 @@ with Client(
     client.followups.enroll("fu_1", {"contact": {"id": "ct_1"}})
 ```
 
+### asyncio
+
+`AsyncClient` has the same resources, methods and parameters (each method is `async`; lists return an
+`AsyncPage`):
+
+```python
+from plasgos_crm import AsyncClient
+
+async with AsyncClient(api_key, secret_key, base_url="sandbox") as client:
+    me = await client.me.get()
+    page = await client.contacts.list(per_page=100)
+    async for contact in page.auto_paging():
+        ...
+```
+
+It takes an `httpx.AsyncBaseTransport` / `httpx.AsyncClient` and an async `sleeper`; close it with
+`async with` or `await client.aclose()`.
+
 Resources:
 
 - `me`, `channels`

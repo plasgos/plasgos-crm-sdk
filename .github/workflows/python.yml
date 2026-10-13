@@ -37,7 +37,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -q
       - run: ruff check .
-      - run: mypy src tests/test_v3_types.py
+      - run: mypy src tests/test_v3_types.py tests/test_v3_async.py
         if: ${{ matrix.python == '3.12' }}
       - name: Tipe sinkron dengan openapi-v3.json
         if: ${{ matrix.python == '3.12' }}

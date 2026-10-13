@@ -15,6 +15,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - Lint rules pinned explicitly (`[tool.ruff.lint] select`): newer ruff versions widened the default rule set and broke CI without any code change.
 
 ### Added
+- `AsyncClient` for `asyncio` (`httpx.AsyncClient`): same resources, methods and parameters as `Client` (checked by a parity test), `AsyncPage` with `await next_page()` and `async for … in auto_paging()`, `async with` / `aclose()`. Signing, idempotency, retry policy and logging are shared with the sync client.
 - DEBUG logging on the `plasgos_crm` stdlib logger (docs/SDK_SPEC.md §1.2): one record per attempt with method, path (no query), status, duration, request id, error code and retry wait (also in `record.plasgos_crm`); never headers or bodies.
 - Per-call options (`options=RequestOptions`, docs/SDK_SPEC.md §1.1), keyword-only on every resource method and `client.request()`: `timeout`, `max_retries`, `headers`. Next pages of `auto_paging()` keep them. Headers the SDK owns (signing, `Idempotency-Key`, `Content-Type`, …) are rejected.
 - Types generated from `openapi/openapi-v3.json` (`scripts/generate-types.mjs`, checked in CI): `plasgos_crm.v3.types` (`TypedDict` per schema, plus `…Body`, `…Query`, `…Data`, `…Item`, `…Meta` per operation); `ApiResponse` is generic (`ApiResponse[Contact]`), every resource method is typed, and `Content.text()` / `media()` / `TemplateContent.to_dict()` return the matching `TypedDict`.

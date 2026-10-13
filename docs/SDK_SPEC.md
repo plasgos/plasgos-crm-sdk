@@ -24,7 +24,12 @@ The legacy `/api/v1` contract (`LegacyClient`) is in [SDK_SPEC_LEGACY_V1.md](SDK
 Client(apiKey, secretKey, options)        # API v3, /api/v3/*
 LegacyClient(apiKey, secretKey, options)  # deprecated, /api/v1/* (see legacy spec)
 CredentialsClient(accessToken, fingerprint, options)  # unchanged, /v2/integration/*
+AsyncClient(apiKey, secretKey, options)   # Python only: asyncio twin of Client
 ```
+
+Python's `AsyncClient` has the same resources, method names and parameters as `Client`; every method
+is a coroutine, and list methods return an `AsyncPage` (`await page.next_page()`,
+`async for item in page.auto_paging()`). `tests/test_v3_async.py` checks the parity.
 
 | Option | Default | Meaning |
 |---|---|---|

@@ -8,11 +8,13 @@ Read paths and validation only — nothing here can deliver a message to a real 
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import pytest
 
 from plasgos_crm import (
+    AsyncClient,
     AuthenticationError,
     Client,
     Content,
@@ -92,3 +94,18 @@ def test_contacts_leads_broadcasts_followups_webhooks_read_paths() -> None:
             assert code_of(lambda: client.followups.get("66f1ffffffffffffffffff99")) == "followup_not_found"
         if "webhooks:manage" in scopes:
             assert code_of(lambda: client.webhooks.test("66f1abcdabcdabcdabcdab99")) == "webhook_not_found"
+
+
+def test_async_client_signs_and_pages_like_the_sync_client() -> None:
+    async def run() -> None:
+        async with AsyncClient(
+            ENV["PLASGOS_LIVE_API_KEY"], ENV["PLASGOS_LIVE_SECRET_KEY"], base_url=ENV["PLASGOS_LIVE_BASE_URL"], max_retries=0
+        ) as client:
+            me = await client.me.get()
+            assert me.http_status == 200
+            page = await client.contacts.list(per_page=2, search="Budi & Sari/+62 👋")
+            assert page.pagination["per_page"] == 2
+            with pytest.raises(NotFoundError):
+                await client.contacts.lookup(phone_number="080000000000")
+
+    asyncio.run(run())

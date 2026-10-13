@@ -46,6 +46,16 @@ with Client(os.environ["PLASGOS_API_KEY"], os.environ["PLASGOS_SECRET_KEY"], bas
     print(me.data["tenant"]["name"], me.data["scopes"])
 ```
 
+Untuk `asyncio` ada `AsyncClient` dengan resource dan parameter yang sama; setiap metode di-`await`
+dan daftar memakai `async for … in page.auto_paging()`:
+
+```python
+from plasgos_crm import AsyncClient
+
+async with AsyncClient(os.environ["PLASGOS_API_KEY"], os.environ["PLASGOS_SECRET_KEY"], base_url="sandbox") as client:
+    me = await client.me.get()
+```
+
 `GET /me` juga menampilkan kuota harian dan jumlah langganan webhook — cocok untuk tombol "Uji koneksi".
 
 ## Kirim pesan pertama

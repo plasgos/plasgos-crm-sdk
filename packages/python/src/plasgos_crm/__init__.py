@@ -32,6 +32,8 @@ from .errors import (
 )
 from .v3 import (
     ApiResponse,
+    AsyncClient,
+    AsyncPage,
     Client,
     Content,
     Page,
@@ -53,6 +55,8 @@ __all__ = [
     "Client",
     "ApiResponse",
     "Page",
+    "AsyncClient",
+    "AsyncPage",
     "RateLimit",
     "RequestOptions",
     "Content",
