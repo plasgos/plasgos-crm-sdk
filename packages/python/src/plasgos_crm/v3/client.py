@@ -8,7 +8,7 @@ import httpx
 
 from .._http import resolve_base_url
 from .._version import __version__
-from ._api_client import ApiClient, Query
+from ._api_client import ApiClient, Query, RequestOptions
 from .resources import (
     BroadcastsResource,
     ChannelsResource,
@@ -46,7 +46,7 @@ class Client:
             )
 
     :param base_url: ``production`` (default), ``sandbox``, or an absolute URL (host only; ``/api/v3`` is appended).
-    :param timeout: per-request timeout in seconds.
+    :param timeout: seconds for each attempt; a call can override it (``options={"timeout": …}``).
     :param max_retries: automatic retries (docs/SDK_SPEC.md §6).
     :param max_retry_wait: longest ``Retry-After`` in seconds honoured automatically.
     :param user_agent: sent as ``User-Agent``; integrations append themselves.
@@ -111,9 +111,11 @@ class Client:
         query: Optional[Query] = None,
         body: Any = None,
         idempotency_key: Optional[str] = None,
+        *,
+        options: Optional[RequestOptions] = None,
     ) -> ApiResponse[Any]:
         """Escape hatch for endpoints without a resource method yet."""
-        return self._http.request(method, path, query, body, idempotency_key)
+        return self._http.request(method, path, query, body, idempotency_key, options=options)
 
     def close(self) -> None:
         self._http.close()

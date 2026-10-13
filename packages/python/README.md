@@ -79,7 +79,7 @@ Resources:
 
 Query parameters may be a mapping, keyword arguments, or both:
 `client.contacts.list({"tag": "vip"}, per_page=100)`.
-`client.request(method, path, query=None, body=None, idempotency_key=None)` is an escape hatch for
+`client.request(method, path, query=None, body=None, idempotency_key=None, *, options=None)` is an escape hatch for
 endpoints that do not have a method yet. The full surface is in
 [docs/SDK_SPEC.md](../../docs/SDK_SPEC.md) §3. Inputs and outputs use the API wire format
 (snake_case), described by [openapi/openapi-v3.json](../../openapi/openapi-v3.json).
@@ -89,12 +89,19 @@ endpoints that do not have a method yet. The full surface is in
 | Argument | Default | Meaning |
 |---|---|---|
 | `base_url` | `"production"` | `"production"`, `"sandbox"`, or an absolute URL (host only). |
-| `timeout` | `15.0` s | Per-request timeout. |
+| `timeout` | `15.0` s | Timeout for each attempt. |
 | `max_retries` | `2` | Automatic retries (see below). |
 | `max_retry_wait` | `30.0` s | Longest `Retry-After` honoured automatically. |
 | `user_agent` | `plasgos-crm-sdk-python/<version> python/<version>` | Integrations append themselves. |
 | `transport` / `http_client` | — | Inject an `httpx` transport (e.g. `httpx.MockTransport`) or your own `httpx.Client`. |
 | `sleeper`, `clock` | real | Test hooks. |
+
+Every method also takes keyword-only per-call options (docs/SDK_SPEC.md §1.1):
+
+```python
+client.messages.send(body, "wc-1234-processing", options={"timeout": 5, "max_retries": 0})
+client.contacts.get(contact_id, options={"headers": {"X-Trace-Id": trace_id}})
+```
 
 ## Responses
 

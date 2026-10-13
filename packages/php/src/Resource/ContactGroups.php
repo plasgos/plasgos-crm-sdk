@@ -10,8 +10,8 @@ use Plasgos\CrmSdk\Page;
 final class ContactGroups extends AbstractResource
 {
     /** @param array{search?: string, page?: int, per_page?: int} $params */
-    public function list(array $params = []): Page
+    public function list(array $params = [], ?RequestOptions $options = null): Page
     {
-        return $this->http->requestPage('/contact-groups', $params);
+        return $this->http->requestPage('/contact-groups', $params, $options);
     }
 }

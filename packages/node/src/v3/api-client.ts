@@ -15,6 +15,26 @@ export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type QueryValue = string | number | boolean | null | undefined;
 export type Query = Record<string, QueryValue>;
 
+/** Per-call overrides (docs/SDK_SPEC.md §1.1). */
+export interface RequestOptions {
+  /** `Idempotency-Key` for this POST; default a UUIDv4 generated once and reused by every retry. */
+  idempotencyKey?: string;
+  /** Timeout in ms for each attempt of this call. */
+  timeout?: number;
+  /** Automatic retries for this call (§6). */
+  maxRetries?: number;
+  /** Extra headers, e.g. tracing. Signing, `Idempotency-Key`, `Content-Type`, `Accept` and `User-Agent` stay with the SDK. */
+  headers?: Record<string, string>;
+  /** Cancels the call, including pending retries; the abort reason is thrown as is. */
+  signal?: AbortSignal;
+}
+
+/** Older call style: a bare string is the idempotency key. */
+export type KeyOrOptions = string | RequestOptions | null | undefined;
+
+/** Headers the SDK owns: overriding them would break signing or idempotency. */
+const RESERVED_HEADERS = new Set(["accept", "user-agent", "plasgos-api-key", "plasgos-timestamp", "plasgos-signature", "idempotency-key", "content-type", "content-length", "host"]);
+
 export interface ApiClientConfig {
   baseUrl: string;
   apiKey: string;
@@ -42,7 +62,8 @@ const RETRY_CAP_MS = 8000;
 export class ApiClient {
   constructor(private readonly config: ApiClientConfig) {}
 
-  async request<T = any, M = Record<string, any>>(method: Method, path: string, query: Query = {}, body?: unknown, idempotencyKey?: string | null): Promise<ApiResponse<T, M>> {
+  async request<T = any, M = Record<string, any>>(method: Method, path: string, query: Query = {}, body?: unknown, keyOrOptions?: KeyOrOptions): Promise<ApiResponse<T, M>> {
+    const options = normalizeOptions(keyOrOptions);
     const verb = method.toUpperCase() as Method;
     const queryString = buildQuery(query);
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}${PREFIX}/${path.replace(/^\//, "")}${queryString ? `?${queryString}` : ""}`;
@@ -51,53 +72,62 @@ export class ApiClient {
     // Serialised ONCE: the exact bytes signed are the bytes sent.
     const rawBody = body === undefined || body === null ? "" : JSON.stringify(body);
     // One key per intent: generated once here and reused by every retry.
-    const key = idempotencyKey ?? (verb === "POST" ? randomUUID() : null);
+    const key = options.idempotencyKey ?? (verb === "POST" ? randomUUID() : null);
+    const maxRetries = options.maxRetries ?? this.config.maxRetries;
 
     for (let attempt = 0; ; attempt++) {
+      options.signal?.throwIfAborted();
       try {
-        return await this.attempt<T, M>(verb, url, requestTarget, rawBody, key);
+        return await this.attempt<T, M>(verb, url, requestTarget, rawBody, key, options);
       } catch (error) {
-        const wait = error instanceof PlasgosApiError ? this.retryWait(error, verb, attempt) : null;
+        const wait = error instanceof PlasgosApiError ? this.retryWait(error, verb, attempt, maxRetries) : null;
         if (wait === null) throw error;
         await this.config.sleep(wait);
       }
     }
   }
 
-  async requestPage<T = any>(path: string, query: Query = {}): Promise<Page<T>> {
-    const response = await this.request<T[]>("GET", path, query);
-    return new Page<T>(response, (page) => this.requestPage<T>(path, { ...query, page }));
+  async requestPage<T = any>(path: string, query: Query = {}, options: RequestOptions = {}): Promise<Page<T>> {
+    const response = await this.request<T[]>("GET", path, query, undefined, options);
+    return new Page<T>(response, (page) => this.requestPage<T>(path, { ...query, page }, options));
   }
 
-  private async attempt<T, M>(method: Method, url: string, requestTarget: string, rawBody: string, idempotencyKey: string | null): Promise<ApiResponse<T, M>> {
+  private async attempt<T, M>(method: Method, url: string, requestTarget: string, rawBody: string, idempotencyKey: string | null, options: RequestOptions): Promise<ApiResponse<T, M>> {
     const headers: Record<string, string> = {
       Accept: "application/json",
       "User-Agent": this.config.userAgent,
+      ...options.headers,
       ...signatureHeadersV3(this.config.apiKey, this.config.secretKey, method, requestTarget, rawBody, this.config.clock()),
     };
     if (idempotencyKey !== null) headers["Idempotency-Key"] = idempotencyKey;
     if (rawBody !== "") headers["Content-Type"] = "application/json; charset=utf-8";
 
+    const timeout = options.timeout ?? this.config.timeout;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.config.timeout);
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const cancel = () => controller.abort();
+    options.signal?.addEventListener("abort", cancel, { once: true });
     let response: Response;
     try {
       response = await this.config.fetchImpl(url, { method, headers, body: rawBody === "" ? undefined : rawBody, signal: controller.signal, redirect: "manual" });
     } catch (error) {
+      // Cancelled by the caller: not a transport failure, never retried.
+      options.signal?.throwIfAborted();
       const timedOut = (error as Error)?.name === "AbortError";
       throw new TransportError(
-        timedOut ? `Request to ${url} timed out after ${this.config.timeout}ms` : `Network error requesting ${url}: ${(error as Error)?.message}`,
+        timedOut ? `Request to ${url} timed out after ${timeout}ms` : `Network error requesting ${url}: ${(error as Error)?.message}`,
         error,
       );
     } finally {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", cancel);
     }
     return parse<T, M>(response.status, lowerHeaders(response.headers), await response.text());
   }
 
   /** Milliseconds to wait before retrying, or null when this error is not retried (§6). */
-  private retryWait(error: PlasgosApiError, method: Method, attempt: number): number | null {
-    if (attempt >= this.config.maxRetries) return null;
+  private retryWait(error: PlasgosApiError, method: Method, attempt: number, maxRetries: number): number | null {
+    if (attempt >= maxRetries) return null;
     if (error instanceof RateLimitError) {
       // Daily quota does not recover in seconds — hand it back to the caller.
       if (error.errorCode !== "rate_limited") return null;
@@ -112,6 +142,14 @@ export class ApiClient {
     if (transient || (method === "GET" && error instanceof ServerError)) return backoff(attempt);
     return null;
   }
+}
+
+function normalizeOptions(keyOrOptions: KeyOrOptions): RequestOptions {
+  const options = typeof keyOrOptions === "string" ? { idempotencyKey: keyOrOptions } : (keyOrOptions ?? {});
+  for (const name of Object.keys(options.headers ?? {})) {
+    if (RESERVED_HEADERS.has(name.toLowerCase())) throw new TypeError(`RequestOptions.headers: "${name}" is set by the SDK`);
+  }
+  return options;
 }
 
 /** Parse a v3 response or throw a typed error (§4, §5). */

@@ -168,6 +168,55 @@ describe("idempotency & retries (SDK_SPEC §6)", () => {
   });
 });
 
+describe("per-call options (SDK_SPEC §1.1)", () => {
+  it("idempotencyKey, headers and maxRetries apply to this call only", async () => {
+    const { client: c, requests } = client([new TypeError("x"), ok(), ok()], { maxRetries: 2 });
+    await expect(c.contacts.upsert({ phone_number: "0812" }, { idempotencyKey: "wc-1", maxRetries: 0, headers: { "X-Trace": "t1" } })).rejects.toBeInstanceOf(TransportError);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.headers["Idempotency-Key"]).toBe("wc-1");
+    expect(requests[0]!.headers["X-Trace"]).toBe("t1");
+    await c.me.get();
+    expect(requests[1]!.headers["X-Trace"]).toBeUndefined();
+  });
+
+  it("headers owned by the SDK cannot be overridden", async () => {
+    const { client: c, requests } = client([ok()]);
+    await expect(c.me.get({ headers: { "plasgos-signature": "v1=forged" } })).rejects.toThrow(/set by the SDK/);
+    await expect(c.messages.send({ endpoint_id: "e", contact: { id: "c" }, content: Content.text("x") }, { headers: { "Idempotency-Key": "k" } })).rejects.toBeInstanceOf(TypeError);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("timeout per call; next pages keep the options", async () => {
+    const seen: Array<{ url: string; trace: string | undefined }> = [];
+    const impl = (async (url: string, init: RequestInit) => {
+      seen.push({ url, trace: (init.headers as Record<string, string>)["X-Trace"] });
+      if (url.includes("/me")) {
+        return new Promise<Response>((_, reject) => init.signal!.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+      }
+      const page = Number(new URL(url).searchParams.get("page") ?? 1);
+      return new Response(JSON.stringify({ success: true, message: "OK", data: [{ id: page }], meta: { pagination: { page, has_next_page: page < 2 } } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const c = new Client("ak", "sk", { baseUrl: "https://crm.example", fetch: impl, maxRetries: 0, timeout: 60_000 });
+    await expect(c.me.get({ timeout: 5 })).rejects.toThrow(/timed out after 5ms/);
+    const all: unknown[] = [];
+    for await (const item of (await c.contacts.list({}, { headers: { "X-Trace": "t2" } })).autoPaging()) all.push(item);
+    expect(all).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(seen.slice(1).map((r) => r.trace)).toEqual(["t2", "t2"]);
+  });
+
+  it("AbortSignal cancels the call and pending retries with the caller's reason", async () => {
+    const controller = new AbortController();
+    const reason = new Error("user left");
+    const { client: c, requests } = client([new TypeError("x"), ok()], {
+      sleep: async () => controller.abort(reason),
+    });
+    await expect(c.me.get({ signal: controller.signal })).rejects.toBe(reason);
+    expect(requests).toHaveLength(1);
+    await expect(c.me.get({ signal: controller.signal })).rejects.toBe(reason);
+    expect(requests).toHaveLength(1);
+  });
+});
+
 describe("errors (SDK_SPEC §5)", () => {
   it("maps the v3 envelope onto every field", async () => {
     const { client: c } = client([

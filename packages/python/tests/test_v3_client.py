@@ -242,6 +242,42 @@ def test_timeout_is_a_transport_error() -> None:
         h.client.me.get()
 
 
+# ——— per-call options (SDK_SPEC §1.1) ———
+
+
+def test_options_apply_to_this_call_only() -> None:
+    h = Harness([connect_error(), ok(), ok()], max_retries=2)
+    with pytest.raises(TransportError):
+        h.client.contacts.upsert(
+            {"phone_number": "0812"}, "wc-1", options={"max_retries": 0, "headers": {"X-Trace": "t1"}, "timeout": 3}
+        )
+    assert len(h.requests) == 1
+    assert h.requests[0].headers["Idempotency-Key"] == "wc-1"
+    assert h.requests[0].headers["X-Trace"] == "t1"
+    assert h.requests[0].extensions["timeout"]["read"] == 3
+    h.client.me.get()
+    assert "X-Trace" not in h.requests[1].headers
+    assert h.requests[1].extensions["timeout"]["read"] == 15.0
+
+
+def test_headers_owned_by_the_sdk_cannot_be_overridden() -> None:
+    h = Harness([ok()])
+    with pytest.raises(ValueError, match="set by the SDK"):
+        h.client.me.get(options={"headers": {"plasgos-signature": "v1=forged"}})
+    with pytest.raises(ValueError):
+        h.client.messages.send({"endpoint_id": "e", "contact": {"id": "c"}, "content": Content.text("x")}, options={"headers": {"Idempotency-Key": "k"}})
+    assert h.requests == []
+
+
+def test_next_pages_keep_the_options() -> None:
+    page = lambda n, nxt: ok([{"id": n}], {"pagination": {"page": n, "has_next_page": nxt}})  # noqa: E731
+    h = Harness([page(1, True), page(2, False)])
+    items = list(h.client.contacts.list(per_page=1, options={"headers": {"X-Trace": "t2"}}).auto_paging())
+    assert items == [{"id": 1}, {"id": 2}]
+    assert [r.headers.get("X-Trace") for r in h.requests] == ["t2", "t2"]
+    assert str(h.requests[1].url).endswith("/api/v3/contacts?per_page=1&page=2")
+
+
 # ——— errors (SDK_SPEC §5) ———
 
 

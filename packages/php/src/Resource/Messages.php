@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Resource;
 
+use Plasgos\CrmSdk\RequestOptions;
 use Plasgos\CrmSdk\Response;
 
 /** `$client->messages` — omnichannel sending. Scopes `messages:read` / `messages:write`. */
@@ -16,9 +17,9 @@ final class Messages extends AbstractResource
      *
      * @param array{contact_id?: string, phone_number?: string, channel?: string, external_id?: string, email?: string, endpoint_id?: string} $contact
      */
-    public function sendOptions(array $contact): Response
+    public function sendOptions(array $contact, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('GET', '/messages/send-options', $contact);
+        return $this->http->request('GET', '/messages/send-options', $contact, options: $options);
     }
 
     /**
@@ -27,14 +28,14 @@ final class Messages extends AbstractResource
      *
      * @param array{endpoint_id: string, contact: array<string, mixed>, content: array<string, mixed>|\JsonSerializable, client_reference?: string|null} $input
      */
-    public function send(array $input, ?string $idempotencyKey = null): Response
+    public function send(array $input, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('POST', '/messages', body: $input, idempotencyKey: $idempotencyKey);
+        return $this->http->request('POST', '/messages', body: $input, idempotencyKey: $idempotencyKey, options: $options);
     }
 
     /** One message by the id returned from send() (the channel message id). */
-    public function get(string $messageId): Response
+    public function get(string $messageId, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('GET', self::path('messages', $messageId));
+        return $this->http->request('GET', self::path('messages', $messageId), options: $options);
     }
 }

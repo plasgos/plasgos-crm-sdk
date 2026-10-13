@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Http;
 
+use GuzzleHttp\ClientInterface as GuzzleClientInterface;
 use Plasgos\CrmSdk\Exception\ChannelException;
 use Plasgos\CrmSdk\Exception\ExceptionFactory;
 use Plasgos\CrmSdk\Exception\PlasgosApiException;
@@ -12,11 +13,13 @@ use Plasgos\CrmSdk\Exception\ServerException;
 use Plasgos\CrmSdk\Exception\ServiceUnavailableException;
 use Plasgos\CrmSdk\Exception\TransportException;
 use Plasgos\CrmSdk\Page;
+use Plasgos\CrmSdk\RequestOptions;
 use Plasgos\CrmSdk\Response;
 use Plasgos\CrmSdk\Signature;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 
@@ -29,7 +32,6 @@ final class ApiClient
     public const PREFIX = '/api/v3';
 
     /** Free-form maps in v3 request bodies (OpenAPI `additionalProperties`). */
-
     private const OBJECT_MAPS = ['custom_fields'];
 
     private const RETRY_BASE_MS = 500;
@@ -57,8 +59,10 @@ final class ApiClient
      * @param array<string, scalar|null> $query
      * @param array<string, mixed>|\JsonSerializable|\stdClass|null $body
      */
-    public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null): Response
+    public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
+        $options ??= new RequestOptions();
+        $maxRetries = max(0, $options->maxRetries ?? $this->maxRetries);
         $method = strtoupper($method);
         $url = rtrim($this->baseUrl, '/') . self::PREFIX . '/' . ltrim($path, '/');
         $queryString = self::buildQuery($query);
@@ -75,9 +79,9 @@ final class ApiClient
 
         for ($attempt = 0; ; $attempt++) {
             try {
-                return $this->attempt($method, $url, $requestTarget, $rawBody, $idempotencyKey);
+                return $this->attempt($method, $url, $requestTarget, $rawBody, $idempotencyKey, $options);
             } catch (PlasgosApiException $e) {
-                $wait = $this->retryWait($e, $method, $attempt);
+                $wait = $this->retryWait($e, $method, $attempt, $maxRetries);
                 if ($wait === null) {
                     throw $e;
                 }
@@ -89,18 +93,22 @@ final class ApiClient
     /**
      * @param array<string, scalar|null> $query
      */
-    public function requestPage(string $path, array $query = []): Page
+    public function requestPage(string $path, array $query = [], ?RequestOptions $options = null): Page
     {
         return new Page(
-            $this->request('GET', $path, $query),
-            fn (int $page): Page => $this->requestPage($path, ['page' => $page] + $query),
+            $this->request('GET', $path, $query, options: $options),
+            fn (int $page): Page => $this->requestPage($path, ['page' => $page] + $query, $options),
         );
     }
 
-    private function attempt(string $method, string $url, string $requestTarget, string $rawBody, ?string $idempotencyKey): Response
+    private function attempt(string $method, string $url, string $requestTarget, string $rawBody, ?string $idempotencyKey, RequestOptions $options): Response
     {
         $timestamp = ($this->clock)();
-        $request = $this->requestFactory->createRequest($method, $url)
+        $request = $this->requestFactory->createRequest($method, $url);
+        foreach ($options->headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
+        $request = $request
             ->withHeader('Accept', 'application/json')
             ->withHeader('User-Agent', $this->userAgent);
         foreach (Signature::headers($this->apiKey, $this->secretKey, $method, $requestTarget, $rawBody, $timestamp) as $name => $value) {
@@ -116,12 +124,27 @@ final class ApiClient
         }
 
         try {
-            $response = $this->client->sendRequest($request);
+            $response = $this->send($request, $options->timeout);
         } catch (ClientExceptionInterface $e) {
             throw new TransportException("Network error requesting {$url}: {$e->getMessage()}", previous: $e, errorCode: 'transport_error');
         }
 
         return self::parse($response);
+    }
+
+    /**
+     * PSR-18 has no per-request timeout; Guzzle takes it as a request option. The other options mirror
+     * what Guzzle's own sendRequest() forces, so an injected Guzzle client behaves the same.
+     */
+    private function send(RequestInterface $request, ?float $timeout): ResponseInterface
+    {
+        if ($timeout === null) {
+            return $this->client->sendRequest($request);
+        }
+        if (! $this->client instanceof GuzzleClientInterface) {
+            throw new \LogicException('RequestOptions timeout needs the Guzzle transport; set the timeout on your own PSR-18 client instead');
+        }
+        return $this->client->send($request, ['timeout' => $timeout, 'connect_timeout' => $timeout, 'http_errors' => false, 'allow_redirects' => false]);
     }
 
     public static function parse(ResponseInterface $response): Response
@@ -174,9 +197,9 @@ final class ApiClient
     /**
      * Seconds to wait before retrying, or null when this error is not retried (§6).
      */
-    private function retryWait(PlasgosApiException $e, string $method, int $attempt): ?float
+    private function retryWait(PlasgosApiException $e, string $method, int $attempt, int $maxRetries): ?float
     {
-        if ($attempt >= $this->maxRetries) {
+        if ($attempt >= $maxRetries) {
             return null;
         }
         if ($e instanceof RateLimitException) {

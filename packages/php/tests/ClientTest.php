@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Tests;
 
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Request;
 use PHPUnit\Framework\TestCase;
 use Plasgos\CrmSdk\Client;
@@ -24,6 +27,7 @@ use Plasgos\CrmSdk\Exception\ServiceUnavailableException;
 use Plasgos\CrmSdk\Exception\SignatureExpiredException;
 use Plasgos\CrmSdk\Exception\TransportException;
 use Plasgos\CrmSdk\Exception\ValidationException;
+use Plasgos\CrmSdk\RequestOptions;
 use Plasgos\CrmSdk\Signature;
 use Plasgos\CrmSdk\Tests\Support\RecordingClient;
 use Psr\Http\Client\NetworkExceptionInterface;
@@ -219,6 +223,67 @@ final class ClientTest extends TestCase
         $http = new RecordingClient([self::networkError(), self::networkError()]);
         $this->expectException(TransportException::class);
         $this->client($http, 1)->me->get();
+    }
+
+    public function testRequestOptionsApplyToThisCallOnly(): void
+    {
+        $http = new RecordingClient([self::networkError(), self::ok(200, []), self::ok(200, [])]);
+        $client = $this->client($http, maxRetries: 2);
+        try {
+            $client->contacts->upsert(['phone_number' => '0812'], 'wc-1', new RequestOptions(maxRetries: 0, headers: ['X-Trace' => 't1']));
+            self::fail('expected TransportException');
+        } catch (TransportException) {
+        }
+        self::assertCount(1, $http->requests);
+        self::assertSame('wc-1', $http->requests[0]->getHeaderLine('Idempotency-Key'));
+        self::assertSame('t1', $http->requests[0]->getHeaderLine('X-Trace'));
+
+        $client->contacts->list(['per_page' => 1], new RequestOptions(headers: ['X-Trace' => 't2']));
+        $client->me->get();
+        self::assertSame('t2', $http->requests[1]->getHeaderLine('X-Trace'));
+        self::assertFalse($http->requests[2]->hasHeader('X-Trace'));
+    }
+
+    public function testRequestOptionsRejectHeadersOwnedByTheSdk(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('"Plasgos-Signature" is set by the SDK');
+        new RequestOptions(headers: ['Plasgos-Signature' => 'v1=forged']);
+    }
+
+    public function testTimeoutPerCallGoesToGuzzle(): void
+    {
+        $seen = [];
+        $mock = new MockHandler([
+            function (RequestInterface $request, array $options) use (&$seen) {
+                $seen[] = $options['timeout'] ?? null;
+                return self::ok(200, ['id' => 'c1']);
+            },
+            function (RequestInterface $request, array $options) use (&$seen) {
+                $seen[] = $options['timeout'] ?? null;
+                return self::error(404, 'contact_not_found', 'not_found_error');
+            },
+        ]);
+        $client = new Client('ak_live_123', 'sk_live_abc', new ClientConfig(
+            baseUrl: BaseUrl::Sandbox,
+            timeout: 30,
+            httpClient: new GuzzleClient(['handler' => HandlerStack::create($mock)]),
+            clock: static fn (): int => self::NOW,
+        ));
+        $client->contacts->get('c1', new RequestOptions(timeout: 2.5));
+        try {
+            // Guzzle's http_errors defaults to true; the SDK turns it off like sendRequest() does.
+            $client->contacts->get('c2', new RequestOptions(timeout: 1));
+            self::fail('expected NotFoundException');
+        } catch (NotFoundException) {
+        }
+        self::assertSame([2.5, 1.0], $seen);
+    }
+
+    public function testTimeoutPerCallNeedsGuzzle(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->client(new RecordingClient([]))->me->get(new RequestOptions(timeout: 1));
     }
 
     /** @return iterable<string, array{int, string, string, class-string<PlasgosApiException>}> */

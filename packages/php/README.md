@@ -155,6 +155,20 @@ new ClientConfig(
 );
 ```
 
+## Per-call options
+
+Every resource method takes a `RequestOptions` as its last argument (docs/SDK_SPEC.md §1.1):
+
+```php
+use Plasgos\CrmSdk\RequestOptions;
+
+$client->messages->send($input, 'wc-1234-processing', new RequestOptions(timeout: 5, maxRetries: 0));
+$client->contacts->get($id, new RequestOptions(headers: ['X-Trace-Id' => $traceId]));
+```
+
+`timeout` per call needs the default Guzzle transport (PSR-18 has no per-request timeout); with your
+own PSR-18 client set the timeout there; the SDK throws `LogicException` rather than ignore it.
+
 ## Legacy v1 client (deprecated)
 
 `LegacyClient` (`/api/v1`) and `CredentialsClient` (`/v2/integration`) keep the 1.x behaviour and

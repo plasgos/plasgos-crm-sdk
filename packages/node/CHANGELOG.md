@@ -14,6 +14,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - `409 idempotency_in_progress` is retried with the same Idempotency-Key (the first request is still running, e.g. after a client-side timeout); other 409s such as `identity_taken` are still raised.
 
 ### Added
+- Per-call options (`RequestOptions`, docs/SDK_SPEC.md §1.1) as the last argument of every resource method and `client.request()`: `idempotencyKey` (a bare string still works), `timeout`, `maxRetries`, `headers`, and `signal` (`AbortSignal`, also cancels pending retries). Next pages of `autoPaging()` keep them. Headers the SDK owns (signing, `Idempotency-Key`, `Content-Type`, …) are rejected.
 - Types generated from `openapi/openapi-v3.json` (`scripts/generate-types.mjs`, checked in CI): `export type * as Types` with every schema and `Types.Operations[operationId]` (`query`, `body`, `data`, `meta`, `item`); every resource method is typed (`ApiResponse<data, meta>`, `Page<item>`), `content` also accepts the `TemplateContent` builder.
 - `Client` for **API Integrasi v3** (`/api/v3`), same contract as the PHP SDK 2.0 (docs/SDK_SPEC.md):
   - Resources: `me`, `channels`, `endpoints` (including templates), `templateVariables`, `messages`

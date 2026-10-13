@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plasgos\CrmSdk\Resource;
 
 use Plasgos\CrmSdk\Page;
+use Plasgos\CrmSdk\RequestOptions;
 use Plasgos\CrmSdk\Response;
 
 /**
@@ -14,20 +15,20 @@ use Plasgos\CrmSdk\Response;
 final class Followups extends AbstractResource
 {
     /** @param array{status?: string, page?: int, per_page?: int} $params */
-    public function list(array $params = []): Page
+    public function list(array $params = [], ?RequestOptions $options = null): Page
     {
-        return $this->http->requestPage('/followups', $params);
+        return $this->http->requestPage('/followups', $params, $options);
     }
 
-    public function get(string $followupId): Response
+    public function get(string $followupId, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('GET', self::path('followups', $followupId));
+        return $this->http->request('GET', self::path('followups', $followupId), options: $options);
     }
 
     /** @param array{status?: string, contact_id?: string, page?: int, per_page?: int} $params */
-    public function enrollments(string $followupId, array $params = []): Page
+    public function enrollments(string $followupId, array $params = [], ?RequestOptions $options = null): Page
     {
-        return $this->http->requestPage(self::path('followups', $followupId, 'enrollments'), $params);
+        return $this->http->requestPage(self::path('followups', $followupId, 'enrollments'), $params, $options);
     }
 
     /**
@@ -36,17 +37,17 @@ final class Followups extends AbstractResource
      *
      * @param array<string, mixed> $enrollment `contact` (one object: id | phone_number | channel + external_id | email, plus profile for a NEW contact), start_at?, client_reference?
      */
-    public function enroll(string $followupId, array $enrollment, ?string $idempotencyKey = null): Response
+    public function enroll(string $followupId, array $enrollment, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('POST', self::path('followups', $followupId, 'enrollments'), body: $enrollment, idempotencyKey: $idempotencyKey);
+        return $this->http->request('POST', self::path('followups', $followupId, 'enrollments'), body: $enrollment, idempotencyKey: $idempotencyKey, options: $options);
     }
 
     /**
      * Stop the sequence for one contact; queued messages are removed (idempotent, `meta['stopped_messages']`).
      * A contact that was never enrolled → NotFoundException `enrollment_not_found`.
      */
-    public function unenroll(string $followupId, string $contactId): Response
+    public function unenroll(string $followupId, string $contactId, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('DELETE', self::path('followups', $followupId, 'enrollments', $contactId));
+        return $this->http->request('DELETE', self::path('followups', $followupId, 'enrollments', $contactId), options: $options);
     }
 }

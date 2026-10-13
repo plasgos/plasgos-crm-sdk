@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Plasgos\CrmSdk\Resource;
 
+use Plasgos\CrmSdk\RequestOptions;
 use Plasgos\CrmSdk\Response;
 
 /** `$client->leads` — scopes `leads:read` / `leads:write`. */
@@ -16,13 +17,13 @@ final class Leads extends AbstractResource
      *
      * @param array<string, mixed> $lead `contact` (one object: id | phone_number | channel + external_id | email, plus profile for a NEW contact), `pipeline_id`, `stage_id`?, …
      */
-    public function create(array $lead, ?string $idempotencyKey = null): Response
+    public function create(array $lead, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('POST', '/leads', body: $lead, idempotencyKey: $idempotencyKey);
+        return $this->http->request('POST', '/leads', body: $lead, idempotencyKey: $idempotencyKey, options: $options);
     }
 
-    public function get(string $leadId): Response
+    public function get(string $leadId, ?RequestOptions $options = null): Response
     {
-        return $this->http->request('GET', self::path('leads', $leadId));
+        return $this->http->request('GET', self::path('leads', $leadId), options: $options);
     }
 }

@@ -9,7 +9,7 @@ import json
 import random
 import re
 import uuid
-from typing import Any, Callable, Mapping, Optional, Union
+from typing import Any, Callable, Mapping, Optional, TypedDict, Union
 from urllib.parse import quote
 
 import httpx
@@ -26,10 +26,29 @@ from ..errors import (
 from .response import ApiResponse, Page, RateLimit
 from .signature import signature_headers_v3
 
-__all__ = ["ApiClient", "parse", "build_query", "segment", "QueryValue", "Query"]
+__all__ = ["ApiClient", "RequestOptions", "parse", "build_query", "segment", "QueryValue", "Query"]
 
 QueryValue = Union[str, int, float, bool, None]
 Query = Mapping[str, QueryValue]
+
+
+
+class RequestOptions(TypedDict, total=False):
+    """Per-call overrides (docs/SDK_SPEC.md §1.1). The idempotency key stays its own argument."""
+
+    timeout: float
+    """Seconds for each attempt of this call."""
+    max_retries: int
+    """Automatic retries for this call (§6)."""
+    headers: Mapping[str, str]
+    """Extra headers, e.g. tracing. Signing, ``Idempotency-Key``, ``Content-Type``, ``Accept`` and
+    ``User-Agent`` stay with the SDK."""
+
+
+# Headers the SDK owns: overriding them would break signing or idempotency.
+_RESERVED_HEADERS = frozenset(
+    {"accept", "user-agent", "plasgos-api-key", "plasgos-timestamp", "plasgos-signature", "idempotency-key", "content-type", "content-length", "host"}
+)
 
 PREFIX = "/api/v3"
 _RETRY_BASE = 0.5
@@ -75,7 +94,9 @@ class ApiClient:
         query: Optional[Query] = None,
         body: Any = None,
         idempotency_key: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
     ) -> ApiResponse[Any]:
+        opts = _check_options(options)
         verb = method.upper()
         query_string = build_query(query or {})
         url = f"{self._base_url}{PREFIX}/{path.lstrip('/')}" + (f"?{query_string}" if query_string else "")
@@ -85,29 +106,31 @@ class ApiClient:
         raw_body = b"" if body is None else _encode_body(body)
         # One key per intent: generated once here and reused by every retry.
         key = idempotency_key if idempotency_key is not None else (str(uuid.uuid4()) if verb == "POST" else None)
+        max_retries = opts.get("max_retries", self._max_retries)
 
         attempt = 0
         while True:
             try:
-                return self._attempt(verb, url, request_target, raw_body, key)
+                return self._attempt(verb, url, request_target, raw_body, key, opts)
             except PlasgosApiError as error:
-                wait = self._retry_wait(error, verb, attempt)
+                wait = self._retry_wait(error, verb, attempt, max_retries)
                 if wait is None:
                     raise
                 self._sleeper(wait)
                 attempt += 1
 
-    def request_page(self, path: str, query: Optional[Query] = None) -> Page[Any]:
+    def request_page(self, path: str, query: Optional[Query] = None, options: Optional[RequestOptions] = None) -> Page[Any]:
         params = dict(query or {})
-        response = self.request("GET", path, params)
-        return Page(response, lambda page: self.request_page(path, {**params, "page": page}))
+        response = self.request("GET", path, params, options=options)
+        return Page(response, lambda page: self.request_page(path, {**params, "page": page}, options))
 
     def _attempt(
-        self, method: str, url: str, request_target: str, raw_body: bytes, idempotency_key: Optional[str]
+        self, method: str, url: str, request_target: str, raw_body: bytes, idempotency_key: Optional[str], options: RequestOptions
     ) -> ApiResponse[Any]:
         headers = {
             "Accept": "application/json",
             "User-Agent": self._user_agent,
+            **options.get("headers", {}),
             **signature_headers_v3(self._api_key, self._secret_key, method, request_target, raw_body, self._clock()),
         }
         if idempotency_key is not None:
@@ -115,17 +138,18 @@ class ApiClient:
         if raw_body:
             headers["Content-Type"] = "application/json; charset=utf-8"
 
+        extra: dict[str, Any] = {"timeout": options["timeout"]} if "timeout" in options else {}
         try:
-            response = self._client.request(method, url, content=raw_body or None, headers=headers)
+            response = self._client.request(method, url, content=raw_body or None, headers=headers, **extra)
         except httpx.TimeoutException as err:
             raise TransportError(f"Request to {url} timed out", raw=err) from err
         except httpx.HTTPError as err:
             raise TransportError(f"Network error requesting {url}: {err}", raw=err) from err
         return parse(response.status_code, {k.lower(): v for k, v in response.headers.items()}, response.text)
 
-    def _retry_wait(self, error: PlasgosApiError, method: str, attempt: int) -> Optional[float]:
+    def _retry_wait(self, error: PlasgosApiError, method: str, attempt: int, max_retries: int) -> Optional[float]:
         """Seconds to wait before retrying, or ``None`` when this error is not retried (§6)."""
-        if attempt >= self._max_retries:
+        if attempt >= max_retries:
             return None
         if isinstance(error, RateLimitError):
             # Daily quota does not recover in seconds — hand it back to the caller.
@@ -143,6 +167,14 @@ class ApiClient:
         if transient or (method == "GET" and isinstance(error, ServerError)):
             return _backoff(attempt)
         return None
+
+
+def _check_options(options: Optional[RequestOptions]) -> RequestOptions:
+    opts: RequestOptions = options or {}
+    for name in opts.get("headers", {}):
+        if name.lower() in _RESERVED_HEADERS:
+            raise ValueError(f'RequestOptions headers: "{name}" is set by the SDK')
+    return opts
 
 
 def parse(status: int, headers: Mapping[str, str], text: str) -> ApiResponse[Any]:

@@ -1,4 +1,4 @@
-import { ApiClient, type Method, type Query } from "./api-client.js";
+import { ApiClient, type KeyOrOptions, type Method, type Query } from "./api-client.js";
 import type { ApiResponse } from "./response.js";
 import {
   BroadcastsResource,
@@ -20,7 +20,7 @@ import { SDK_VERSION } from "../version.js";
 export interface ClientV3Options {
   /** `production` (default), `sandbox`, or an absolute URL (host only; `/api/v3` is appended). */
   baseUrl?: BaseUrlName | string;
-  /** Per-request timeout in ms. Default 15 000. */
+  /** Timeout in ms for each attempt. Default 15 000; a call can override it (`RequestOptions`). */
   timeout?: number;
   /** Automatic retries (docs/SDK_SPEC.md §6). Default 2. */
   maxRetries?: number;
@@ -94,8 +94,8 @@ export class Client {
     this.webhooks = new WebhooksResource(this.http);
   }
 
-  /** Escape hatch for endpoints without a resource method yet. */
-  request<T = any>(method: Method, path: string, query: Query = {}, body?: unknown, idempotencyKey?: string): Promise<ApiResponse<T>> {
-    return this.http.request<T>(method, path, query, body, idempotencyKey);
+  /** Escape hatch for endpoints without a resource method yet. A string last argument is the idempotency key. */
+  request<T = any>(method: Method, path: string, query: Query = {}, body?: unknown, options?: KeyOrOptions): Promise<ApiResponse<T>> {
+    return this.http.request<T>(method, path, query, body, options);
   }
 }

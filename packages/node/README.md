@@ -74,7 +74,7 @@ Resources:
 - `broadcasts`, `followups`
 - `webhooks`
 
-`client.request(method, path, query?, body?, idempotencyKey?)` is an escape hatch for endpoints that
+`client.request(method, path, query?, body?, options?)` is an escape hatch for endpoints that
 do not have a method yet. The full surface is in [docs/SDK_SPEC.md](../../docs/SDK_SPEC.md) §3.
 Inputs and outputs use the API wire format (snake_case), described by
 [openapi/openapi-v3.json](../../openapi/openapi-v3.json).
@@ -84,12 +84,21 @@ Inputs and outputs use the API wire format (snake_case), described by
 | Option | Default | Meaning |
 |---|---|---|
 | `baseUrl` | `production` | `production`, `sandbox`, or an absolute URL (host only). |
-| `timeout` | `15000` ms | Per-request timeout. |
+| `timeout` | `15000` ms | Timeout for each attempt. |
 | `maxRetries` | `2` | Automatic retries (see below). |
 | `maxRetryWait` | `30` s | Longest `Retry-After` honoured automatically. |
 | `userAgent` | `plasgos-crm-sdk-node/<version> node/<version>` | Integrations append themselves. |
 | `fetch` | global `fetch` | Injectable transport. |
 | `sleep`, `clock` | real | Test hooks. |
+
+Every method also takes per-call options as its last argument (docs/SDK_SPEC.md §1.1):
+
+```ts
+await client.messages.send(input, { idempotencyKey: "wc-1234-processing", timeout: 5_000, maxRetries: 0 });
+await client.contacts.get(id, { headers: { "X-Trace-Id": traceId }, signal: AbortSignal.timeout(3_000) });
+```
+
+A bare string is still read as the idempotency key: `client.messages.send(input, "wc-1234-processing")`.
 
 ## Responses
 

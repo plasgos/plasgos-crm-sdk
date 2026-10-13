@@ -29,12 +29,29 @@ CredentialsClient(accessToken, fingerprint, options)  # unchanged, /v2/integrati
 | Option | Default | Meaning |
 |---|---|---|
 | `baseUrl` | `production` | `production`, `sandbox`, or an absolute URL (host only; the SDK appends `/api/v3`). |
-| `timeout` | 15 s | Per-request timeout. |
+| `timeout` | 15 s | Timeout for each attempt; a call can override it (§1.1). |
 | `maxRetries` | `2` | Automatic retries (§6). |
 | `maxRetryWait` | 30 s | Longest `Retry-After` honoured automatically; longer ones are raised to the caller. |
 | `userAgent` | `plasgos-crm-sdk-<lang>/<version> <runtime>/<version>` | Sent as `User-Agent`. Integrations append themselves, e.g. `plasgos-wordpress/1.0.0 (+https://shop.example)`. |
 | transport | platform default | Injectable HTTP client (PSR-18, `fetch`, `httpx`). |
 | `sleeper`, `clock` | real | Test hooks for retry waits and the signing timestamp. |
+
+### 1.1 Per-call options
+
+Every resource method and `request()` takes per-call options as its last argument. They apply to that
+call only, including its retries and, for lists, every page `autoPaging()` fetches.
+
+| Option | Node (`RequestOptions`) | PHP (`RequestOptions`) | Python (`options=`, `RequestOptions`) |
+|---|---|---|---|
+| Idempotency key | `idempotencyKey` (a bare string still works) | own argument `$idempotencyKey` | own argument `idempotency_key` |
+| Timeout per attempt | `timeout` (ms) | `timeout` (s; needs the default Guzzle transport, else `LogicException`) | `timeout` (s) |
+| Automatic retries | `maxRetries` | `maxRetries` | `max_retries` |
+| Extra headers | `headers` | `headers` | `headers` |
+| Cancellation | `signal` (`AbortSignal`; also stops pending retries, the abort reason is thrown as is) | — | — |
+
+Headers owned by the SDK are rejected (Node `TypeError`, PHP `InvalidArgumentException`, Python
+`ValueError`): `Accept`, `User-Agent`, `Plasgos-Api-Key`, `Plasgos-Timestamp`, `Plasgos-Signature`,
+`Idempotency-Key`, `Content-Type`, `Content-Length`, `Host`.
 
 The base URLs are:
 

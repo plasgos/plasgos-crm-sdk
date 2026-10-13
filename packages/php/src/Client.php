@@ -101,8 +101,8 @@ final class Client
      * @param array<string, scalar|null> $query
      * @param array<string, mixed>|\JsonSerializable|\stdClass|null $body
      */
-    public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null): Response
+    public function request(string $method, string $path, array $query = [], array|\JsonSerializable|\stdClass|null $body = null, ?string $idempotencyKey = null, ?RequestOptions $options = null): Response
     {
-        return $this->http->request($method, $path, $query, $body, $idempotencyKey);
+        return $this->http->request($method, $path, $query, $body, $idempotencyKey, $options);
     }
 }
