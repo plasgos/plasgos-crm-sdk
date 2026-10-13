@@ -78,7 +78,7 @@ final class ClientTest extends TestCase
         $http = new RecordingClient([self::ok(202, ['id' => 'msg_1', 'status' => 'pending'])]);
         $this->client($http)->messages->send([
             'endpoint_id' => '6281100000001',
-            'recipient' => ['phone_number' => '081234567890'],
+            'contact' => ['phone_number' => '081234567890'],
             'content' => Content::template('tpl_1')->dynamic('name', '{{full_name}}'),
         ], idempotencyKey: 'wc-1-processing');
 
@@ -123,12 +123,12 @@ final class ClientTest extends TestCase
         $http = new RecordingClient([
             self::error(503, 'channel_unavailable', 'service_unavailable'),
             self::networkError(),
-            self::ok(201, ['id' => 'c1'], ['operation' => 'created']),
+            self::ok(201, ['id' => 'c1'], ['created' => true]),
         ]);
         $response = $this->client($http)->contacts->upsert(['phone_number' => '0812']);
 
         self::assertSame(201, $response->httpStatus);
-        self::assertSame('created', $response->meta['operation']);
+        self::assertTrue($response->meta['created']);
         $keys = array_map(static fn (RequestInterface $r): string => $r->getHeaderLine('Idempotency-Key'), $http->requests);
         self::assertCount(3, $keys);
         self::assertMatchesRegularExpression('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $keys[0]);
@@ -169,7 +169,7 @@ final class ClientTest extends TestCase
 
         $http = new RecordingClient([self::error(500, 'internal_error', 'api_error')]);
         try {
-            $this->client($http)->leads->create(['contact_id' => 'c', 'pipeline_id' => 'p']);
+            $this->client($http)->leads->create(['contact' => ['id' => 'c'], 'pipeline_id' => 'p']);
             self::fail('expected ServerException');
         } catch (ServerException $e) {
             self::assertCount(1, $http->requests, 'a 500 POST may have partially run — not retried');
@@ -180,7 +180,7 @@ final class ClientTest extends TestCase
     {
         $http = new RecordingClient([self::error(422, 'requires_template', 'invalid_request')]);
         try {
-            $this->client($http)->messages->send(['endpoint_id' => 'e', 'recipient' => ['contact_id' => 'c'], 'content' => Content::text('x')]);
+            $this->client($http)->messages->send(['endpoint_id' => 'e', 'contact' => ['id' => 'c'], 'content' => Content::text('x')]);
             self::fail('expected ValidationException');
         } catch (ValidationException $e) {
             self::assertSame('requires_template', $e->errorCode);
@@ -218,7 +218,7 @@ final class ClientTest extends TestCase
     public function testMapsV3ErrorEnvelope(int $status, string $code, string $type, string $class): void
     {
         // A 400 WITH per-field errors is a ValidationException (same rule as legacy); without, a BadRequestException.
-        $fields = $status === 400 ? [] : [['field' => 'recipient.phone_number', 'code' => 'required', 'message' => 'wajib']];
+        $fields = $status === 400 ? [] : [['field' => 'contact.phone_number', 'code' => 'required', 'message' => 'wajib']];
         $http = new RecordingClient([self::error($status, $code, $type, [], ['contact_id' => 'c9'], $fields)]);
         try {
             $this->client($http, 0)->contacts->get('c1');
@@ -231,8 +231,8 @@ final class ClientTest extends TestCase
             self::assertSame('Pesan galat', $e->getMessage());
             self::assertSame(['contact_id' => 'c9'], $e->details);
             if ($fields !== []) {
-                self::assertSame('recipient.phone_number', $e->fields[0]['field']);
-                self::assertSame(['recipient', 'phone_number'], $e->errors[0]['path'], 'legacy ->errors view kept');
+                self::assertSame('contact.phone_number', $e->fields[0]['field']);
+                self::assertSame(['contact', 'phone_number'], $e->errors[0]['path'], 'legacy ->errors view kept');
             }
             self::assertSame('req_err', $e->requestId);
             self::assertStringEndsWith("#{$code}", (string) $e->docUrl);
@@ -267,7 +267,7 @@ final class ClientTest extends TestCase
         $http = new RecordingClient([self::ok(202, ['id' => 'msg_1'], [], 'Pesan masuk antrean kirim', [
             'RateLimit-Limit' => '120', 'RateLimit-Remaining' => '119', 'RateLimit-Reset' => '42', 'Idempotent-Replayed' => 'true',
         ])]);
-        $response = $this->client($http)->messages->send(['endpoint_id' => 'e', 'recipient' => ['contact_id' => 'c'], 'content' => Content::text('hai')]);
+        $response = $this->client($http)->messages->send(['endpoint_id' => 'e', 'contact' => ['id' => 'c'], 'content' => Content::text('hai')]);
 
         self::assertSame('Pesan masuk antrean kirim', $response->message);
         self::assertSame(['id' => 'msg_1'], $response->data);

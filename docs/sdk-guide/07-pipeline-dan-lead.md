@@ -22,7 +22,7 @@ pipelines = client.pipelines.list()
 | Field | Isi |
 |---|---|
 | `pipeline_id` | wajib |
-| `contact_id` **atau** `contact` | kontak yang sudah ada, atau data kontak yang di-upsert server |
+| `contact` | `{id}`, `{phone_number, …profil}`, `{email, …profil}`, atau `{channel, external_id}` — dicari, atau DIBUAT bila belum ada (nomor/email); kontak yang sudah ada tidak diubah |
 | `stage_id` | opsional — bawaan stage pertama |
 | `score`, `tags`, `note` | opsional |
 | `source_detail` | opsional: asal lead, mis. `wordpress:cf7:12` |
@@ -36,11 +36,11 @@ console.log(r.httpStatus, r.meta.created, r.data.stage);   // 201 baru | 200 + c
 ```
 
 ```php
-$r = $client->leads->create(['contact_id' => 'ct_1', 'pipeline_id' => 'pl_1'], 'form-123-lead');
+$r = $client->leads->create(['contact' => ['id' => 'ct_1'], 'pipeline_id' => 'pl_1'], 'form-123-lead');
 ```
 
 ```python
-r = client.leads.create({"contact_id": "ct_1", "pipeline_id": "pl_1"}, idempotency_key="form-123-lead")
+r = client.leads.create({"contact": {"id": "ct_1"}, "pipeline_id": "pl_1"}, idempotency_key="form-123-lead")
 ```
 
 **Satu lead aktif per kontak.** Bila kontak masih punya lead aktif (di channel atau pipeline mana pun),

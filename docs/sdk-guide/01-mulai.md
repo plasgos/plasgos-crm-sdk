@@ -54,7 +54,7 @@ with Client(os.environ["PLASGOS_API_KEY"], os.environ["PLASGOS_SECRET_KEY"], bas
 // Node
 import { Content } from "plasgos-crm-sdk";
 const sent = await client.messages.send(
-  { endpoint_id: "6281100000001", recipient: { phone_number: "081234567890" }, content: Content.text("Halo!") },
+  { endpoint_id: "6281100000001", contact: { phone_number: "081234567890" }, content: Content.text("Halo!") },
   "pesan-pertama-001", // Idempotency-Key — satu per maksud kirim
 );
 console.log(sent.httpStatus, sent.data.status); // 202, pending | sent | failed
@@ -65,7 +65,7 @@ console.log(sent.httpStatus, sent.data.status); // 202, pending | sent | failed
 use Plasgos\CrmSdk\Content;
 $sent = $client->messages->send([
     'endpoint_id' => '6281100000001',
-    'recipient' => ['phone_number' => '081234567890'],
+    'contact' => ['phone_number' => '081234567890'],
     'content' => Content::text('Halo!'),
 ], idempotencyKey: 'pesan-pertama-001');
 ```
@@ -74,7 +74,7 @@ $sent = $client->messages->send([
 # Python
 from plasgos_crm import Content
 sent = client.messages.send(
-    {"endpoint_id": "6281100000001", "recipient": {"phone_number": "081234567890"}, "content": Content.text("Halo!")},
+    {"endpoint_id": "6281100000001", "contact": {"phone_number": "081234567890"}, "content": Content.text("Halo!")},
     idempotency_key="pesan-pertama-001",
 )
 ```
@@ -84,7 +84,7 @@ sent = client.messages.send(
 | Konsep | Arti |
 |---|---|
 | **Titik kirim (endpoint)** | Satu nomor WhatsApp (resmi/tidak resmi), satu akun Instagram, atau satu halaman Messenger milik tenant. Id-nya dari `endpoints.list()`. |
-| **Penerima (recipient)** | Tepat satu dari `contact_id`, `phone_number` (WhatsApp saja), atau `identity` (`channel` + `external_id`). |
+| **Kontak (`contact`)** | SATU objek untuk menyebut "siapa" di pesan, lead, dan followup: `{id}`, `{phone_number}`, `{channel, external_id}` (Instagram/Messenger), atau `{email}`. Field profil (`name`, `email`, `tags`, …) hanya mengisi kontak yang BARU dibuat. Kueri (`send-options`, `lookup`) memakai kunci yang sama. |
 | **Isi (content)** | `text`, media (`image`/`video`/`audio`/`document`), atau `template` WhatsApp — bentuk yang sama dengan inbox CRM. Gunakan builder `Content`. |
 | **Idempotency-Key** | Setiap `POST` membawanya (dibuat otomatis bila tak diberikan) dan dipakai ulang saat coba ulang, jadi tak ada kiriman ganda. Beri kunci bermakna per maksud, mis. `wc-1234-processing`. |
 | **Format kabel** | Isi permintaan & `data` respons apa adanya dari API (`snake_case`); skemanya ada di OpenAPI. |

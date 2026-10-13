@@ -31,7 +31,7 @@ urutan berubah menjadi `updated_at` naik, untuk sinkron bertahap), `page`, `per_
 | Metode | Perilaku |
 |---|---|
 | `create(contact)` | Buat saja. Nomor/email sudah dipakai → `ConflictError identity_taken` (`details.contact_id`). |
-| `upsert(contact)` | Cari dengan `match_on` (`phone_number` bawaan, atau `email`); ada → diperbarui (200), tidak → dibuat (201). `meta.operation` = `created`/`updated`. **Tag & grup ditambahkan**, tidak diganti. |
+| `upsert(contact)` | Cari dengan `match_on` (`phone_number` bawaan, atau `email`); ada → diperbarui (200), tidak → dibuat (201). `meta.created` = `true`/`false`. **Tag & grup ditambahkan**, tidak diganti. |
 | `get(id)` | Kontak sumber gabungan mengembalikan kontak tujuan dengan `meta.redirected_from`. |
 | `update(id, changes)` | Ubah sebagian. `tags` & `group_ids` memakai `{add: [], remove: []}`; `custom_fields` per kunci (`null` menghapus). |
 
@@ -40,7 +40,7 @@ const r = await client.contacts.upsert(
   { match_on: "email", email: "budi@contoh.id", name: "Budi", tags: ["woocommerce"], custom_fields: { wp_user_id: "42" } },
   "wp-user-42-v3",
 );
-console.log(r.httpStatus, r.meta.operation);
+console.log(r.httpStatus, r.meta.created);
 await client.contacts.update(r.data.id, { tags: { add: ["vip"], remove: ["prospek"] } });
 ```
 

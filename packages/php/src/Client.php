@@ -29,7 +29,7 @@ use Plasgos\CrmSdk\Resource\Webhooks;
  *
  * $client->messages->send([
  *     'endpoint_id' => '6281100000001',
- *     'recipient' => ['phone_number' => '081234567890'],
+ *     'contact' => ['phone_number' => '081234567890'],
  *     'content' => \Plasgos\CrmSdk\Content::template('66f1…')->dynamic('name', '{{full_name}}'),
  * ], idempotencyKey: 'wc-1234-processing');
  * ```

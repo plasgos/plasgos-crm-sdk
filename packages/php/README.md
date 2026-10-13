@@ -47,8 +47,7 @@ echo $me->data['tenant']['name'], PHP_EOL;
 try {
     $sent = $client->messages->send([
         'endpoint_id' => '6281100000001',
-        'recipient' => ['phone_number' => '081234567890'],
-        'create_contact' => ['name' => 'Budi Santoso'],
+        'contact' => ['phone_number' => '081234567890', 'name' => 'Budi Santoso'], // profile only for a NEW contact
         'content' => Content::template('66f1a2b3c4d5e6f708192a3b')
             ->dynamic('name', '{{full_name}}')
             ->custom('order', 'INV-2026-0917'),
@@ -66,7 +65,7 @@ foreach ($client->contacts->list(['per_page' => 100])->autoPaging() as $contact)
 
 $client->contacts->upsert(['phone_number' => '081234567890', 'name' => 'Budi', 'tags' => ['woocommerce']]);
 $client->leads->create(['contact' => ['phone_number' => '081234567890'], 'pipeline_id' => 'pl_1']);
-$client->followups->enroll('fu_1', ['contact_id' => 'ct_1']);
+$client->followups->enroll('fu_1', ['contact' => ['id' => 'ct_1']]);
 ```
 
 Resources:
@@ -88,7 +87,7 @@ yet. The full surface is in [docs/SDK_SPEC.md](../../docs/SDK_SPEC.md) §3.
 $r->httpStatus;  // 200, 201, 202 …
 $r->message;     // user-facing text
 $r->data;        // payload
-$r->meta;        // e.g. ['operation' => 'created'] for upserts
+$r->meta;        // e.g. ['created' => true] (201) / ['created' => false] (200)
 $r->requestId;   // quote it when contacting Plasgos
 $r->rateLimit;   // ['limit' => 120, 'remaining' => 119, 'reset' => 42]
 $r->replayed;    // true when the server replayed the first response for this Idempotency-Key

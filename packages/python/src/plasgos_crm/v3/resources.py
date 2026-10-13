@@ -82,12 +82,12 @@ class TemplateVariablesResource(_Resource):
 class MessagesResource(_Resource):
     """``client.messages`` — omnichannel sending. Scopes ``messages:read`` / ``messages:write``."""
 
-    def send_options(self, recipient: Optional[Query] = None, **kwargs: QueryValue) -> ApiResponse:
-        """Endpoints that can reach this recipient.
+    def send_options(self, contact: Optional[Query] = None, **kwargs: QueryValue) -> ApiResponse:
+        """Endpoints that can reach this contact.
 
-        Exactly one of ``contact_id``, ``phone_number``, ``channel`` + ``external_id`` (+ ``endpoint_id``).
+        Exactly one of ``contact_id``, ``phone_number``, ``channel`` + ``external_id``, or ``email`` (+ ``endpoint_id``).
         """
-        return self._http.request("GET", "/messages/send-options", _query(recipient, kwargs))
+        return self._http.request("GET", "/messages/send-options", _query(contact, kwargs))
 
     def send(self, message: Body, idempotency_key: Optional[str] = None) -> ApiResponse:
         """202. A message the channel rejected is still 202 with ``status = failed`` and ``error``."""
@@ -115,7 +115,7 @@ class ContactsResource(_Resource):
         return self._http.request("POST", "/contacts", None, contact, idempotency_key)
 
     def upsert(self, contact: Body, idempotency_key: Optional[str] = None) -> ApiResponse:
-        """201 created / 200 updated (``meta["operation"]``). Tags and group ids are ADDED; may include ``match_on``."""
+        """201 created / 200 updated (``meta["created"]``). Tags and group ids are ADDED; may include ``match_on``."""
         return self._http.request("POST", "/contacts/upsert", None, contact, idempotency_key)
 
     def get(self, contact_id: str) -> ApiResponse:

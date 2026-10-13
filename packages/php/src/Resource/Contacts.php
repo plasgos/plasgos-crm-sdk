@@ -39,7 +39,7 @@ final class Contacts extends AbstractResource
     }
 
     /**
-     * Create (201) or update (200); `meta['operation']` is `created` | `updated`.
+     * Create (201) or update (200); `meta['created']` is true | false.
      * Tags and group ids are ADDED, never replaced.
      *
      * @param array<string, mixed> $contact may include `match_on` = phone_number | email

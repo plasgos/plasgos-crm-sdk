@@ -135,7 +135,7 @@ describe("idempotency & retries (SDK_SPEC §6)", () => {
     await read.client.me.get();
     expect(read.requests).toHaveLength(2);
     const write = client([fail(500, "internal_error", "api_error")]);
-    await expect(write.client.leads.create({ contact_id: "c" })).rejects.toBeInstanceOf(ServerError);
+    await expect(write.client.leads.create({ contact: { id: "c" } })).rejects.toBeInstanceOf(ServerError);
     expect(write.requests).toHaveLength(1);
   });
 
@@ -158,13 +158,13 @@ describe("idempotency & retries (SDK_SPEC §6)", () => {
 describe("errors (SDK_SPEC §5)", () => {
   it("maps the v3 envelope onto every field", async () => {
     const { client: c } = client([
-      { status: 422, body: { success: false, message: "Isi permintaan tidak sesuai format", error: { code: "validation_failed", type: "invalid_request", details: { a: 1 }, fields: [{ field: "recipient.phone_number", code: "required", message: "Wajib diisi" }], doc_url: "https://docs/x" }, meta: { request_id: "req_9" } } },
+      { status: 422, body: { success: false, message: "Isi permintaan tidak sesuai format", error: { code: "validation_failed", type: "invalid_request", details: { a: 1 }, fields: [{ field: "contact.phone_number", code: "required", message: "Wajib diisi" }], doc_url: "https://docs/x" }, meta: { request_id: "req_9" } } },
     ]);
     const error = (await c.contacts.create({}).catch((e) => e)) as ValidationError;
     expect(error).toBeInstanceOf(ValidationError);
     expect(error).toMatchObject({ message: "Isi permintaan tidak sesuai format", httpStatus: 422, errorCode: "validation_failed", errorType: "invalid_request", details: { a: 1 }, docUrl: "https://docs/x", requestId: "req_9" });
-    expect(error.fields).toEqual([{ field: "recipient.phone_number", code: "required", message: "Wajib diisi" }]);
-    expect(error.errors).toEqual([{ message: "Wajib diisi", path: ["recipient", "phone_number"] }]);
+    expect(error.fields).toEqual([{ field: "contact.phone_number", code: "required", message: "Wajib diisi" }]);
+    expect(error.errors).toEqual([{ message: "Wajib diisi", path: ["contact", "phone_number"] }]);
   });
 
   it.each([
@@ -212,12 +212,12 @@ describe("errors (SDK_SPEC §5)", () => {
 
 describe("responses (SDK_SPEC §4)", () => {
   it("exposes meta, request id, rate limit, replay and headers", async () => {
-    const { client: c } = client([{ status: 201, body: { success: true, message: "Kontak dibuat", data: { id: "c1" }, meta: { request_id: "req_7", operation: "created" } }, headers: { "RateLimit-Limit": "120", "RateLimit-Remaining": "119", "RateLimit-Reset": "30", "Idempotent-Replayed": "true", "X-Request-Id": "req_hdr" } }]);
+    const { client: c } = client([{ status: 201, body: { success: true, message: "Kontak dibuat", data: { id: "c1" }, meta: { request_id: "req_7", created: true } }, headers: { "RateLimit-Limit": "120", "RateLimit-Remaining": "119", "RateLimit-Reset": "30", "Idempotent-Replayed": "true", "X-Request-Id": "req_hdr" } }]);
     const r = await c.contacts.upsert({ phone_number: "0812" });
     expect(r.httpStatus).toBe(201);
     expect(r.message).toBe("Kontak dibuat");
     expect(r.data).toEqual({ id: "c1" });
-    expect(r.meta.operation).toBe("created");
+    expect(r.meta.created).toBe(true);
     expect(r.requestId).toBe("req_7");
     expect(r.rateLimit).toEqual({ limit: 120, remaining: 119, reset: 30 });
     expect(r.replayed).toBe(true);

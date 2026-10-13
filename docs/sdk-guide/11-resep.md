@@ -9,8 +9,7 @@ function notifyOrderStatus(Client $client, array $order, string $status): void
 {
     $client->messages->send([
         'endpoint_id' => '6281100000001',
-        'recipient' => ['phone_number' => $order['billing_phone']],
-        'create_contact' => ['name' => $order['billing_name'], 'email' => $order['billing_email'], 'tags' => ['toko']],
+        'contact' => ['phone_number' => $order['billing_phone'], 'name' => $order['billing_name'], 'email' => $order['billing_email'], 'tags' => ['toko']],
         'content' => Content::template('tpl_order_status')
             ->dynamic('name', '{{full_name}}')
             ->custom('order', $order['number'])
@@ -28,9 +27,9 @@ function notifyOrderStatus(Client $client, array $order, string $status): void
 
 ```ts
 const contact = await client.contacts.upsert({ phone_number: form.phone, name: form.name, tags: ["formulir"] }, `form-${entryId}-contact`);
-await client.leads.create({ contact_id: contact.data.id, pipeline_id: "pl_1", source_detail: "landing:promo" }, `form-${entryId}-lead`);
+await client.leads.create({ contact: { id: contact.data.id }, pipeline_id: "pl_1", source_detail: "landing:promo" }, `form-${entryId}-lead`);
 if (form.consent) {
-  await client.messages.send({ endpoint_id: "6281100000001", recipient: { contact_id: contact.data.id }, content: Content.template("tpl_welcome").dynamic("name", "{{full_name}}") }, `form-${entryId}-welcome`);
+  await client.messages.send({ endpoint_id: "6281100000001", contact: { id: contact.data.id }, content: Content.template("tpl_welcome").dynamic("name", "{{full_name}}") }, `form-${entryId}-welcome`);
 }
 ```
 

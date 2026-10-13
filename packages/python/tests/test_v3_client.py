@@ -203,7 +203,7 @@ def test_plain_500_retries_reads_not_writes() -> None:
     assert len(read.requests) == 2
     write = Harness([fail(500, "internal_error", "api_error")])
     with pytest.raises(ServerError):
-        write.client.leads.create({"contact_id": "c"})
+        write.client.leads.create({"contact": {"id": "c"}})
     assert len(write.requests) == 1
 
 
@@ -245,7 +245,7 @@ def test_maps_v3_envelope_onto_every_field() -> None:
                     "code": "validation_failed",
                     "type": "invalid_request",
                     "details": {"a": 1},
-                    "fields": [{"field": "recipient.phone_number", "code": "required", "message": "Wajib diisi"}],
+                    "fields": [{"field": "contact.phone_number", "code": "required", "message": "Wajib diisi"}],
                     "doc_url": "https://docs/x",
                 },
                 "meta": {"request_id": "req_9"},
@@ -258,8 +258,8 @@ def test_maps_v3_envelope_onto_every_field() -> None:
     assert (e.message, e.http_status, e.error_code, e.error_type) == (
         "Isi permintaan tidak sesuai format", 422, "validation_failed", "invalid_request")
     assert (e.details, e.doc_url, e.request_id) == ({"a": 1}, "https://docs/x", "req_9")
-    assert e.fields == [{"field": "recipient.phone_number", "code": "required", "message": "Wajib diisi"}]
-    assert e.errors == [{"message": "Wajib diisi", "path": ["recipient", "phone_number"]}]
+    assert e.fields == [{"field": "contact.phone_number", "code": "required", "message": "Wajib diisi"}]
+    assert e.errors == [{"message": "Wajib diisi", "path": ["contact", "phone_number"]}]
 
 
 @pytest.mark.parametrize(
@@ -319,13 +319,13 @@ def test_response_fields() -> None:
     h = Harness([
         {
             "status": 201,
-            "body": {"success": True, "message": "Kontak dibuat", "data": {"id": "c1"}, "meta": {"request_id": "req_7", "operation": "created"}},
+            "body": {"success": True, "message": "Kontak dibuat", "data": {"id": "c1"}, "meta": {"request_id": "req_7", "created": True}},
             "headers": {"RateLimit-Limit": "120", "RateLimit-Remaining": "119", "RateLimit-Reset": "30", "Idempotent-Replayed": "true", "X-Request-Id": "req_hdr"},
         }
     ])
     r = h.client.contacts.upsert({"phone_number": "0812"})
     assert (r.http_status, r.message, r.data) == (201, "Kontak dibuat", {"id": "c1"})
-    assert r.meta["operation"] == "created"
+    assert r.meta["created"] is True
     assert r.request_id == "req_7"
     assert (r.rate_limit.limit, r.rate_limit.remaining, r.rate_limit.reset) == (120, 119, 30)
     assert r.replayed is True
@@ -349,7 +349,7 @@ def test_resource_routes() -> None:
     c = Harness([ok() for _ in range(9)])
     c.client.messages.send_options(phone_number="0812")
     c.client.followups.unenroll("f1", "c/1")
-    c.client.followups.enroll("f1", {"contact_id": "c1"}, "enrol-1")
+    c.client.followups.enroll("f1", {"contact": {"id": "c1"}}, "enrol-1")
     c.client.webhooks.rotate_secret("w1")
     c.client.webhooks.update("w1", {"enabled": False})
     c.client.webhooks.delete("w1")

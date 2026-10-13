@@ -23,7 +23,7 @@ followups = client.followups.list(status="active")
 
 | Field | Isi |
 |---|---|
-| `contact_id` **atau** `contact` | kontak yang sudah ada, atau data kontak yang di-upsert server |
+| `contact` | `{id}`, `{phone_number, …profil}`, `{email, …profil}`, atau `{channel, external_id}` — dicari, atau DIBUAT bila belum ada (nomor/email); kontak yang sudah ada tidak diubah |
 | `start_at` | opsional, ISO 8601 — langkah pertama dijadwalkan dari waktu ini |
 | `client_reference` | opsional, rujukan Anda |
 
@@ -33,11 +33,11 @@ console.log(r.httpStatus, r.meta.created, r.data.status, r.data.next_run_at);
 ```
 
 ```php
-$r = $client->followups->enroll('fu_1', ['contact_id' => 'ct_1'], 'order-55-reminder-1');
+$r = $client->followups->enroll('fu_1', ['contact' => ['id' => 'ct_1']], 'order-55-reminder-1');
 ```
 
 ```python
-r = client.followups.enroll("fu_1", {"contact_id": "ct_1"}, idempotency_key="order-55-reminder-1")
+r = client.followups.enroll("fu_1", {"contact": {"id": "ct_1"}}, idempotency_key="order-55-reminder-1")
 ```
 
 **201** = terdaftar baru; **200** dengan `meta.created = false` = kontak masih punya jadwal aktif di

@@ -39,7 +39,7 @@ class Client:
             res = client.messages.send(
                 {
                     "endpoint_id": "6281100000001",
-                    "recipient": {"phone_number": "081234567890"},
+                    "contact": {"phone_number": "081234567890"},
                     "content": Content.text("Halo"),
                 },
                 idempotency_key="order-1001-shipped",

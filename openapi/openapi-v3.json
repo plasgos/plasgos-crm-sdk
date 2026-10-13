@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Plasgos CRM Integration API",
-    "version": "3.0.0-rc.1",
+    "version": "3.0.0-rc.2",
     "summary": "API publik Plasgos CRM untuk pihak ketiga (WordPress, SDK, sistem klien).",
-    "description": "**Status: kandidat rilis (3.0.0-rc.1).** Seluruh operasi di dokumen ini sudah terimplementasi; belum dirilis ke production. Dokumen modul: `server/modules/api_integration/docs/API_INTEGRATION_V3.md`; rancangan & rencana: repo plasgos-wordpress `docs/02` & `docs/05`.\n\n## Autentikasi\nSetiap permintaan (kecuali `GET /openapi.json`) membawa tiga header:\n\n| Header | Isi |\n|---|---|\n| `Plasgos-Api-Key` | api key (64 hex) |\n| `Plasgos-Timestamp` | detik Unix |\n| `Plasgos-Signature` | `v1=` + hex(HMAC-SHA256(secret, string_to_sign)) |\n\n```\nstring_to_sign = timestamp + \"\\n\" + METHOD + \"\\n\" + request_target + \"\\n\" + hex(sha256(raw_body))\n```\n`request_target` = path + query persis seperti dikirim (mis. `/api/v3/contacts?page=2`).\nTanpa body → sha256 dari string kosong. Selisih waktu > 300 detik → `401 signature_expired`.\n\n## Bentuk respons\nSukses: `{ success: true, message, data, meta }`. Galat: `{ success: false, message, error, meta }`.\nProgram bercabang dari `error.code`, bukan dari `message`. Klien WAJIB mengabaikan field yang\ntidak dikenal (respons hanya bertambah dalam v3).\n\n## Idempotensi\n`POST` pembuat/pengirim menerima `Idempotency-Key` (disimpan 24 jam per kunci API).\n",
+    "description": "**Status: kandidat rilis (3.0.0-rc.2).** Seluruh operasi di dokumen ini sudah terimplementasi; belum dirilis ke production. Dokumen modul: `server/modules/api_integration/docs/API_INTEGRATION_V3.md`; rancangan & rencana: repo plasgos-wordpress `docs/02` & `docs/05`.\n\n## Perubahan rc.2 (dari rc.1)\n- **Satu objek `contact`** untuk menyebut \"siapa\" di `POST /messages`, `POST /leads`, `POST /followups/{id}/enrollments` (menggantikan `recipient` + `identity` + `create_contact`, dan `contact_id` | `contact`). Kueri `send-options` & `lookup` memakai kunci yang sama (`send-options` kini juga menerima `email`).\n- **`meta.created`** seragam (upsert kontak: menggantikan `meta.operation`; kirim pesan: `true`).\n- Bentuk penerima salah → `422 validation_failed` (dulu `recipient_invalid` / `lookup_invalid`).\n- Katalog kode galat: `components.x-error-codes`.\n\n## Autentikasi\nSetiap permintaan (kecuali `GET /openapi.json`) membawa tiga header:\n\n| Header | Isi |\n|---|---|\n| `Plasgos-Api-Key` | api key (64 hex) |\n| `Plasgos-Timestamp` | detik Unix |\n| `Plasgos-Signature` | `v1=` + hex(HMAC-SHA256(secret, string_to_sign)) |\n\n```\nstring_to_sign = timestamp + \"\\n\" + METHOD + \"\\n\" + request_target + \"\\n\" + hex(sha256(raw_body))\n```\n`request_target` = path + query persis seperti dikirim (mis. `/api/v3/contacts?page=2`).\nTanpa body → sha256 dari string kosong. Selisih waktu > 300 detik → `401 signature_expired`.\n\n## Bentuk respons\nSukses: `{ success: true, message, data, meta }`. Galat: `{ success: false, message, error, meta }`.\nProgram bercabang dari `error.code`, bukan dari `message`. Klien WAJIB mengabaikan field yang\ntidak dikenal (respons hanya bertambah dalam v3).\n\n## Idempotensi\n`POST` pembuat/pengirim menerima `Idempotency-Key` (disimpan 24 jam per kunci API).\n",
     "contact": {
       "name": "Plasgos",
       "url": "https://plasgos.co.id"
@@ -574,7 +574,7 @@
         ],
         "operationId": "getMessageSendOptions",
         "summary": "Titik kirim yang bisa dipakai ke penerima dan format yang wajib",
-        "description": "Penerima disebut dengan TEPAT SATU cara — `contact_id`, `phone_number`, atau `channel` + `external_id`.",
+        "description": "Penerima disebut dengan TEPAT SATU cara — `contact_id`, `phone_number`, `channel` + `external_id`, atau `email` (kunci yang sama dengan objek `contact`). Bentuk salah → `422 validation_failed`.",
         "parameters": [
           {
             "name": "contact_id",
@@ -604,6 +604,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "description": "Kontak yang sudah ada dengan email ini (tak ada → `contact: null`, `options: []`)."
           },
           {
             "name": "endpoint_id",
@@ -678,7 +687,7 @@
         ],
         "operationId": "sendMessage",
         "summary": "Kirim satu pesan ke satu penerima (omnichannel)",
-        "description": "Memakai ulang percakapan yang ada dengan penerima itu di titik kirim yang sama.\nDijawab **202**; status akhir lewat `GET /messages/{id}` atau webhook `message.status_updated`.\nPesan yang tersimpan tetapi ditolak penyedia tetap 202 dengan `data.status = failed` dan `data.error`.\n",
+        "description": "Memakai ulang percakapan yang ada dengan penerima itu di titik kirim yang sama.\nDijawab **202**; status akhir lewat `GET /messages/{id}` atau webhook `message.status_updated`.\nPesan yang tersimpan tetapi ditolak penyedia tetap 202 dengan `data.status = failed` dan `data.error`.\n\nPenerima disebut dengan objek `contact` (lihat skema `ContactRef`): `id`, `phone_number`, `channel` + `external_id`, atau `email`; field profil hanya mengisi kontak WhatsApp yang BARU dibuat.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -696,10 +705,8 @@
                   "summary": "Template WhatsApp resmi ke nomor (buat kontak bila belum ada)",
                   "value": {
                     "endpoint_id": "6281100000001",
-                    "recipient": {
-                      "phone_number": "081234567890"
-                    },
-                    "create_contact": {
+                    "contact": {
+                      "phone_number": "081234567890",
                       "name": "Budi Santoso",
                       "email": "budi@contoh.id",
                       "tags": [
@@ -731,8 +738,8 @@
                   "summary": "Teks ke kontak yang ada",
                   "value": {
                     "endpoint_id": "6281100000001",
-                    "recipient": {
-                      "contact_id": "66f1a2b3c4d5e6f7a8b9c0d1"
+                    "contact": {
+                      "id": "66f1a2b3c4d5e6f7a8b9c0d1"
                     },
                     "content": {
                       "type": "text",
@@ -747,11 +754,9 @@
                   "summary": "Gambar ke Instagram (pelanggan pernah menghubungi)",
                   "value": {
                     "endpoint_id": "17841400000000000",
-                    "recipient": {
-                      "identity": {
-                        "channel": "instagram",
-                        "external_id": "1784…"
-                      }
+                    "contact": {
+                      "channel": "instagram",
+                      "external_id": "1784…"
                     },
                     "content": {
                       "type": "image",
@@ -805,13 +810,23 @@
                             },
                             {
                               "properties": {
+                                "created": {
+                                  "type": "boolean",
+                                  "const": true,
+                                  "description": "Pesan selalu dibuat (202)."
+                                },
                                 "conversation_created": {
                                   "type": "boolean"
                                 },
                                 "contact_created": {
                                   "type": "boolean"
                                 }
-                              }
+                              },
+                              "required": [
+                                "contact_created",
+                                "conversation_created",
+                                "created"
+                              ]
                             }
                           ]
                         }
@@ -847,6 +862,7 @@
                   },
                   "meta": {
                     "request_id": "req_01JA2Z7K3M9Q4X8T",
+                    "created": true,
                     "conversation_created": false,
                     "contact_created": true
                   }
@@ -1183,7 +1199,7 @@
         ],
         "operationId": "upsertContact",
         "summary": "Buat atau perbarui kontak berdasarkan nomor/email",
-        "description": "`201` bila dibuat, `200` bila diperbarui. Hanya field yang dikirim yang diubah;\n`tags` dan `group_ids` DITAMBAHKAN, bukan menimpa; `custom_fields` digabung per kunci (`null` menghapus kunci itu).\nUpsert serentak untuk nomor/email yang sama menghasilkan satu kontak. Email disimpan huruf kecil.\nNomor milik kontak yang sudah digabung memperbarui kontak tujuannya.\nGalat: `identity_taken` (409, nomor/email dipakai kontak lain, `details.contact_id`), `group_not_found` (404),\n`invalid_contact_draft` / `invalid_phone_number` / `invalid_custom_field` (422), `contact_limit_reached` (403).\n",
+        "description": "`201` + `meta.created = true` bila dibuat, `200` + `meta.created = false` bila diperbarui. Hanya field yang dikirim yang diubah;\n`tags` dan `group_ids` DITAMBAHKAN, bukan menimpa; `custom_fields` digabung per kunci (`null` menghapus kunci itu).\nUpsert serentak untuk nomor/email yang sama menghasilkan satu kontak. Email disimpan huruf kecil.\nNomor milik kontak yang sudah digabung memperbarui kontak tujuannya.\nGalat: `identity_taken` (409, nomor/email dipakai kontak lain, `details.contact_id`), `group_not_found` (404),\n`invalid_contact_draft` / `invalid_phone_number` / `invalid_custom_field` (422), `contact_limit_reached` (403).\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -1315,7 +1331,7 @@
         ],
         "operationId": "lookupContact",
         "summary": "Cari tepat satu kontak",
-        "description": "Sebut tepat satu cara — `phone_number`, `email`, atau `channel` + `external_id` (selain itu `422 lookup_invalid`). Kontak hasil gabung diikuti ke tujuannya. Tak ditemukan → `404 contact_not_found`.",
+        "description": "Sebut tepat satu cara — `phone_number`, `email`, atau `channel` + `external_id` (kunci yang sama dengan objek `contact`; selain itu `422 validation_failed`). Kontak hasil gabung diikuti ke tujuannya. Tak ditemukan → `404 contact_not_found`.",
         "parameters": [
           {
             "name": "phone_number",
@@ -1778,7 +1794,7 @@
         ],
         "operationId": "createLead",
         "summary": "Buat lead untuk kontak",
-        "description": "Aturan: **1 lead AKTIF per kontak di semua pipeline**; pelanggan yang lead-nya lost/converted menjadi lead baru.\n`201` lead baru; `200` + `meta.created = false` bila kontak sudah punya lead aktif (lead itu dikembalikan apa adanya, tak diubah).\nSebut kontak dengan `contact_id` (kontak gabungan diikuti ke tujuannya) ATAU `contact`.\nGalat: `pipeline_not_found`, `stage_not_found`, `contact_not_found` (404); galat kontak dari `contact` sama dengan upsert kontak.\n",
+        "description": "Aturan: **1 lead AKTIF per kontak di semua pipeline**; pelanggan yang lead-nya lost/converted menjadi lead baru.\n`201` lead baru; `200` + `meta.created = false` bila kontak sudah punya lead aktif (lead itu dikembalikan apa adanya, tak diubah).\nKontak disebut dengan objek `contact` (`ContactRef`): dicari, atau DIBUAT bila belum ada (penanda `phone_number`/`email`); kontak yang sudah ada tidak diubah.\nGalat: `pipeline_not_found`, `stage_not_found`, `contact_not_found` (404); `identity_taken` (409) bila email profil milik kontak lain.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -2660,7 +2676,7 @@
         ],
         "operationId": "enrollFollowup",
         "summary": "Daftarkan kontak ke followup",
-        "description": "Daftarkan kontak ke followup yang SUDAH ADA (dibuat di dashboard). `201` terdaftar baru; `200` + `meta.created = false` bila kontak masih punya jadwal aktif di followup ini (tak pernah dijadwalkan dua kali).\nGalat: `followup_not_found`, `contact_not_found` (404); `followup_not_active` (409); `followup_empty` (422); `not_entitled` (403, paket tanpa followup).\n",
+        "description": "Daftarkan kontak ke followup yang SUDAH ADA (dibuat di dashboard). `201` terdaftar baru; `200` + `meta.created = false` bila kontak masih punya jadwal aktif di followup ini (tak pernah dijadwalkan dua kali).\nGalat: `followup_not_found`, `contact_not_found` (404); `followup_not_active` (409); `followup_empty` (422); `not_entitled` (403, paket tanpa followup).\n\nKontak disebut dengan objek `contact` (`ContactRef`): dicari, atau DIBUAT bila belum ada (penanda `phone_number`/`email`); kontak yang sudah ada tidak diubah.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -2679,13 +2695,6 @@
                   "phone_number": "081234567890"
                 },
                 "start_at": null,
-                "variables": [
-                  {
-                    "param": "order",
-                    "type": "custom",
-                    "value": "INV-2026-0917"
-                  }
-                ],
                 "client_reference": "wc-order-1234-pending"
               }
             }
@@ -3981,7 +3990,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "Kode mesin yang stabil. Daftar terbuka — kode baru bisa bertambah.",
+            "description": "Kode mesin yang stabil — bercabanglah dengan ini. Katalog lengkap (status HTTP & arti) ada di `components.x-error-codes`; kode baru bisa bertambah.",
             "examples": [
               "signature_invalid",
               "scope_missing",
@@ -4491,64 +4500,6 @@
           "failed"
         ]
       },
-      "Recipient": {
-        "type": "object",
-        "description": "TEPAT SATU dari contact_id, phone_number, identity.",
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "contact_id"
-            ],
-            "properties": {
-              "contact_id": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "phone_number"
-            ],
-            "properties": {
-              "phone_number": {
-                "type": "string",
-                "description": "WhatsApp saja",
-                "examples": [
-                  "081234567890"
-                ]
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "identity"
-            ],
-            "properties": {
-              "identity": {
-                "type": "object",
-                "required": [
-                  "channel",
-                  "external_id"
-                ],
-                "properties": {
-                  "channel": {
-                    "$ref": "#/components/schemas/ChannelName"
-                  },
-                  "external_id": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "additionalProperties": false
-          }
-        ]
-      },
       "TemplateVariableValue": {
         "type": "object",
         "required": [
@@ -4727,26 +4678,16 @@
         "type": "object",
         "required": [
           "endpoint_id",
-          "recipient",
+          "contact",
           "content"
         ],
         "properties": {
           "endpoint_id": {
             "type": "string"
           },
-          "recipient": {
-            "$ref": "#/components/schemas/Recipient"
-          },
-          "create_contact": {
-            "description": "WhatsApp saja; dipakai bila nomor belum terdaftar, diabaikan bila sudah ada.\nNomor diambil dari `recipient.phone_number` — tidak perlu diulang di sini.\n",
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/CreateContactInput"
-              }
-            ]
+          "contact": {
+            "$ref": "#/components/schemas/ContactRef",
+            "description": "Penerima. Instagram/Messenger: `channel` + `external_id` (pelanggan harus pernah menghubungi akun ini). `email` = kontak yang sudah ada. Kontak BARU hanya dibuat untuk WhatsApp (dari `phone_number`), memakai field profil."
           },
           "content": {
             "$ref": "#/components/schemas/Content"
@@ -5047,61 +4988,6 @@
         },
         "additionalProperties": false
       },
-      "CreateContactInput": {
-        "type": "object",
-        "description": "Data kontak baru untuk `create_contact`; semua opsional. Field lain ditolak `invalid_contact_draft`.",
-        "properties": {
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 120
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "email"
-          },
-          "company_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "lifecycle_stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "examples": [
-              "lead",
-              "customer"
-            ]
-          },
-          "locale": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "timezone": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
       "ContactPatch": {
         "type": "object",
         "properties": {
@@ -5297,15 +5183,12 @@
                   {
                     "type": "object",
                     "required": [
-                      "operation"
+                      "created"
                     ],
                     "properties": {
-                      "operation": {
-                        "type": "string",
-                        "enum": [
-                          "created",
-                          "updated"
-                        ]
+                      "created": {
+                        "type": "boolean",
+                        "description": "`true` = kontak dibuat (201), `false` = kontak yang ada diperbarui (200)."
                       },
                       "redirected_from": {
                         "type": [
@@ -5395,27 +5278,13 @@
       "CreateLeadRequest": {
         "type": "object",
         "required": [
+          "contact",
           "pipeline_id"
         ],
-        "oneOf": [
-          {
-            "required": [
-              "contact_id"
-            ]
-          },
-          {
-            "required": [
-              "contact"
-            ]
-          }
-        ],
         "properties": {
-          "contact_id": {
-            "type": "string"
-          },
           "contact": {
-            "$ref": "#/components/schemas/ContactInput",
-            "description": "Di-upsert per nomor (atau email bila tanpa nomor) — aturan sama dengan `POST /contacts/upsert`."
+            "$ref": "#/components/schemas/ContactRef",
+            "description": "Kontak; dicari, atau DIBUAT bila belum ada dan penandanya `phone_number`/`email` (profil hanya untuk kontak baru). Identitas channel harus sudah dikenal."
           },
           "pipeline_id": {
             "type": "string"
@@ -6020,25 +5889,10 @@
       },
       "EnrollRequest": {
         "type": "object",
-        "oneOf": [
-          {
-            "required": [
-              "contact_id"
-            ]
-          },
-          {
-            "required": [
-              "contact"
-            ]
-          }
-        ],
         "properties": {
-          "contact_id": {
-            "type": "string",
-            "description": "Kontak gabungan diikuti ke tujuannya."
-          },
           "contact": {
-            "$ref": "#/components/schemas/ContactInput"
+            "$ref": "#/components/schemas/ContactRef",
+            "description": "Kontak; dicari, atau DIBUAT bila belum ada dan penandanya `phone_number`/`email` (profil hanya untuk kontak baru). Identitas channel harus sudah dikenal."
           },
           "start_at": {
             "type": [
@@ -6056,7 +5910,10 @@
             "maxLength": 120
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "required": [
+          "contact"
+        ]
       },
       "Enrollment": {
         "type": "object",
@@ -6440,6 +6297,392 @@
             "format": "date-time"
           }
         }
+      },
+      "ContactRef": {
+        "type": "object",
+        "description": "SATU cara menyebut \"siapa\" di seluruh API v3 (pesan, lead, followup). Penanda utama: `id` (kontak yang sudah ada; tak boleh digabung field lain), atau `phone_number`, atau `channel` + `external_id`, atau `email` — bila beberapa diisi, dipilih berurutan `phone_number` → `channel`/`external_id` → `email`. Field profil (`name`, `email`, `company_name`, `tags`, `lifecycle_stage`, `locale`, `timezone`) HANYA mengisi kontak yang BARU dibuat; kontak yang sudah ada tidak diubah (pakai `POST /contacts/upsert`). Kueri `GET /messages/send-options` & `GET /contacts/lookup` memakai kunci yang sama secara datar (`contact_id` untuk `id`). Bentuk salah → `422 validation_failed` dengan `fields`.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id kontak yang sudah ada (kontak gabungan diikuti ke tujuannya)."
+          },
+          "phone_number": {
+            "type": "string",
+            "description": "Nomor WhatsApp, format bebas (`0812…`, `62812…`, `+62 812…`)."
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelName"
+          },
+          "external_id": {
+            "type": "string",
+            "description": "Id pelanggan di channel (IGSID/PSID; untuk WhatsApp = nomor). Berpasangan dengan `channel`."
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30
+          },
+          "lifecycle_stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "lead",
+              "customer"
+            ]
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "examples": [
+          {
+            "id": "66f1a2b3c4d5e6f7a8b9c0d1"
+          },
+          {
+            "phone_number": "081234567890",
+            "name": "Budi Santoso",
+            "tags": [
+              "woocommerce"
+            ]
+          },
+          {
+            "channel": "instagram",
+            "external_id": "17841400000000001"
+          },
+          {
+            "email": "budi@contoh.id"
+          }
+        ]
+      }
+    },
+    "x-error-codes": {
+      "api_key_invalid": {
+        "status": 401,
+        "description": "Kunci API tak dikenal / belum disetujui / dicabut"
+      },
+      "api_key_not_active": {
+        "status": 401,
+        "description": "Kunci API tak dikenal / belum disetujui / dicabut"
+      },
+      "api_key_revoked": {
+        "status": 401,
+        "description": "Kunci API tak dikenal / belum disetujui / dicabut"
+      },
+      "attachment_not_supported": {
+        "status": 422,
+        "description": "Broadcast tak bisa diproses"
+      },
+      "attachment_type_mismatch": {
+        "status": 422,
+        "description": "Broadcast tak bisa diproses"
+      },
+      "awaiting_customer": {
+        "status": 409,
+        "description": "Pelanggan belum menghubungi / jendela balas tertutup (Instagram, Messenger)"
+      },
+      "bad_request": {
+        "status": 400,
+        "description": "Permintaan tak bisa diproses"
+      },
+      "broadcast_not_cancellable": {
+        "status": 409,
+        "description": "Broadcast sudah selesai / dibatalkan"
+      },
+      "broadcast_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "channel_broadcast_unsupported": {
+        "status": 422,
+        "description": "Broadcast v3 hanya untuk WhatsApp resmi"
+      },
+      "channel_not_connected": {
+        "status": 409,
+        "description": "Titik kirim belum siap / terputus"
+      },
+      "channel_provider_error": {
+        "status": 502,
+        "description": "Penyedia channel menolak / gagal"
+      },
+      "channel_unavailable": {
+        "status": 503,
+        "description": "Layanan sementara tak tersedia"
+      },
+      "contact_blocked": {
+        "status": 422,
+        "description": "Penerima tak bisa dihubungi (menolak / diblokir)"
+      },
+      "contact_limit_reached": {
+        "status": 403,
+        "description": "Batas jumlah kontak paket tercapai"
+      },
+      "contact_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "contact_opted_out": {
+        "status": 422,
+        "description": "Penerima tak bisa dihubungi (menolak / diblokir)"
+      },
+      "content_invalid": {
+        "status": 422,
+        "description": "Jenis isi tak didukung channel / isi tak sah"
+      },
+      "content_type_unsupported": {
+        "status": 422,
+        "description": "Jenis isi tak didukung channel / isi tak sah"
+      },
+      "conversation_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "daily_broadcast_limit_exceeded": {
+        "status": 429,
+        "description": "Kuota harian broadcast integrasi habis (`details` = sisa)"
+      },
+      "daily_quota_exceeded": {
+        "status": 429,
+        "description": "Kuota harian habis"
+      },
+      "endpoint_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "endpoint_not_ready": {
+        "status": 409,
+        "description": "Titik kirim belum siap / terputus"
+      },
+      "enrollment_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "followup_empty": {
+        "status": 422,
+        "description": "Followup belum punya langkah"
+      },
+      "followup_not_active": {
+        "status": 409,
+        "description": "Followup tidak aktif"
+      },
+      "followup_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "graph_error": {
+        "status": 502,
+        "description": "Penyedia channel menolak / gagal"
+      },
+      "group_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "idempotency_in_progress": {
+        "status": 409,
+        "description": "Permintaan dengan Idempotency-Key yang sama masih diproses"
+      },
+      "idempotency_key_invalid": {
+        "status": 422,
+        "description": "Idempotency-Key salah format (8–255 karakter ASCII)"
+      },
+      "idempotency_key_reused": {
+        "status": 422,
+        "description": "Idempotency-Key sama untuk isi berbeda"
+      },
+      "identity_not_on_endpoint": {
+        "status": 422,
+        "description": "Pelanggan belum pernah terhubung di titik kirim ini"
+      },
+      "identity_taken": {
+        "status": 409,
+        "description": "Nomor/email sudah milik kontak lain (`details.contact_id`)"
+      },
+      "internal_error": {
+        "status": 500,
+        "description": "Galat server (tak dibocorkan)"
+      },
+      "invalid_channel": {
+        "status": 422,
+        "description": "Nilai channel / transport tak dikenal"
+      },
+      "invalid_contact_draft": {
+        "status": 422,
+        "description": "Data kontak tak sah"
+      },
+      "invalid_custom_field": {
+        "status": 422,
+        "description": "Data kontak tak sah"
+      },
+      "invalid_phone_number": {
+        "status": 422,
+        "description": "Data kontak tak sah"
+      },
+      "invalid_transport": {
+        "status": 422,
+        "description": "Nilai channel / transport tak dikenal"
+      },
+      "lead_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "malformed_json": {
+        "status": 400,
+        "description": "Body bukan JSON yang sah"
+      },
+      "media_url_rejected": {
+        "status": 422,
+        "description": "URL media bukan alamat publik http/https"
+      },
+      "message_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "no_valid_recipients": {
+        "status": 422,
+        "description": "Broadcast tak bisa diproses"
+      },
+      "not_entitled": {
+        "status": 403,
+        "description": "Fitur di luar paket tenant"
+      },
+      "payload_too_large": {
+        "status": 413,
+        "description": "Body terlalu besar"
+      },
+      "pipeline_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "rate_limited": {
+        "status": 429,
+        "description": "Batas per menit (pulih sendiri; `Retry-After`)"
+      },
+      "recipient_invalid": {
+        "status": 422,
+        "description": "Jenis isi tak didukung channel / isi tak sah"
+      },
+      "recipient_unknown": {
+        "status": 422,
+        "description": "Jenis isi tak didukung channel / isi tak sah"
+      },
+      "requires_template": {
+        "status": 422,
+        "description": "WhatsApp resmi di luar jendela 24 jam — kirim template"
+      },
+      "route_not_found": {
+        "status": 404,
+        "description": "Endpoint tak ada di API v3"
+      },
+      "schedule_in_past": {
+        "status": 422,
+        "description": "Broadcast tak bisa diproses"
+      },
+      "scope_missing": {
+        "status": 403,
+        "description": "Scope kunci kurang"
+      },
+      "service_unavailable": {
+        "status": 503,
+        "description": "Layanan sementara tak tersedia"
+      },
+      "signature_expired": {
+        "status": 401,
+        "description": "Selisih jam > 300 detik (`details.server_time`)"
+      },
+      "signature_invalid": {
+        "status": 401,
+        "description": "Header tanda tangan tak ada / salah"
+      },
+      "signature_missing": {
+        "status": 401,
+        "description": "Header tanda tangan tak ada / salah"
+      },
+      "stage_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "template_flow_unavailable": {
+        "status": 409,
+        "description": "Flow template tak tersedia"
+      },
+      "template_media_unavailable": {
+        "status": 502,
+        "description": "Penyedia channel menolak / gagal"
+      },
+      "template_not_approved": {
+        "status": 422,
+        "description": "Template tak bisa dipakai"
+      },
+      "template_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "template_unsupported": {
+        "status": 422,
+        "description": "Template tak bisa dipakai"
+      },
+      "template_variable_invalid": {
+        "status": 422,
+        "description": "Template tak bisa dipakai"
+      },
+      "template_variables_missing": {
+        "status": 422,
+        "description": "Template tak bisa dipakai"
+      },
+      "token_invalid": {
+        "status": 502,
+        "description": "Penyedia channel menolak / gagal"
+      },
+      "too_many_recipients": {
+        "status": 422,
+        "description": "Broadcast tak bisa diproses"
+      },
+      "validation_failed": {
+        "status": 422,
+        "description": "Isi permintaan tak sesuai format — lihat `fields`"
+      },
+      "webhook_limit_reached": {
+        "status": 409,
+        "description": "Maks. 5 langganan webhook per tenant"
+      },
+      "webhook_not_found": {
+        "status": 404,
+        "description": "Sumber daya tak ditemukan di akun Anda"
+      },
+      "webhook_url_invalid": {
+        "status": 422,
+        "description": "URL webhook wajib https & alamat publik"
       }
     }
   }

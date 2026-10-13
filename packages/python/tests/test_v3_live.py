@@ -61,10 +61,10 @@ def test_channels_endpoints_and_message_read_paths() -> None:
         with pytest.raises(ValidationError) as info:
             client.messages.send({
                 "endpoint_id": "x",
-                "recipient": {"contact_id": "a", "phone_number": "081234567890"},
+                "contact": {"id": "a", "phone_number": "081234567890"},
                 "content": Content.text("uji"),
             })
-        assert info.value.fields[0]["field"] == "recipient"
+        assert info.value.fields[0]["field"] == "contact.id"
 
 
 def test_contacts_leads_broadcasts_followups_webhooks_read_paths() -> None:

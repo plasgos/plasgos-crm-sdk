@@ -42,7 +42,7 @@ export interface ClientV3Options {
  * ```ts
  * const client = new Client(apiKey, secretKey, { baseUrl: "sandbox" });
  * const res = await client.messages.send(
- *   { endpoint_id: "6281100000001", recipient: { phone_number: "081234567890" }, content: Content.text("Halo") },
+ *   { endpoint_id: "6281100000001", contact: { phone_number: "081234567890" }, content: Content.text("Halo") },
  *   "order-1001-shipped",
  * );
  * ```

@@ -34,9 +34,9 @@ describe.skipIf(!live)("live API v3", () => {
     for (const endpoint of endpoints) expect(["ready", "not_ready", "disconnected"]).toContain(endpoint.status);
     expect((await client.messages.sendOptions({ phone_number: "6280000000001" })).data.contact).toBeNull();
     await expect(client.messages.get("wamid.sdk-live-test-missing")).rejects.toMatchObject({ errorCode: "message_not_found" });
-    const invalid = await client.messages.send({ endpoint_id: "x", recipient: { contact_id: "a", phone_number: "081234567890" }, content: Content.text("uji") }).catch((e) => e);
+    const invalid = await client.messages.send({ endpoint_id: "x", contact: { id: "a", phone_number: "081234567890" }, content: Content.text("uji") }).catch((e) => e);
     expect(invalid).toBeInstanceOf(ValidationError);
-    expect(invalid.fields[0].field).toBe("recipient");
+    expect(invalid.fields[0].field).toBe("contact.id");
   });
 
   it("contacts, pipelines, leads, broadcasts, followups and webhooks read paths", async () => {

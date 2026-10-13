@@ -45,8 +45,7 @@ with Client(
         sent = client.messages.send(
             {
                 "endpoint_id": "6281100000001",
-                "recipient": {"phone_number": "081234567890"},
-                "create_contact": {"name": "Budi Santoso"},
+                "contact": {"phone_number": "081234567890", "name": "Budi Santoso"},  # profile only for a NEW contact
                 "content": Content.template("66f1a2b3c4d5e6f708192a3b")
                 .dynamic("name", "{{full_name}}")
                 .custom("order", "INV-2026-0917"),
@@ -65,7 +64,7 @@ with Client(
 
     client.contacts.upsert({"phone_number": "081234567890", "name": "Budi", "tags": ["woocommerce"]})
     client.leads.create({"contact": {"phone_number": "081234567890"}, "pipeline_id": "pl_1"})
-    client.followups.enroll("fu_1", {"contact_id": "ct_1"})
+    client.followups.enroll("fu_1", {"contact": {"id": "ct_1"}})
 ```
 
 Resources:
@@ -103,7 +102,7 @@ endpoints that do not have a method yet. The full surface is in
 r.http_status  # 200, 201, 202 …
 r.message      # user-facing text
 r.data         # payload
-r.meta         # e.g. {"operation": "created"} for upserts
+r.meta         # e.g. {"created": True} (201) / {"created": False} (200)
 r.request_id   # quote it when contacting Plasgos
 r.rate_limit   # RateLimit(limit=120, remaining=119, reset=42)
 r.replayed     # True when the server replayed the first response for this Idempotency-Key

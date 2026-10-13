@@ -14,7 +14,7 @@ final class Leads extends AbstractResource
      * (one active lead per contact across all pipelines) — that lead is returned unchanged.
      * Unknown ids → NotFoundException `pipeline_not_found` | `stage_not_found` | `contact_not_found`.
      *
-     * @param array<string, mixed> $lead `contact_id` OR `contact`, `pipeline_id`, `stage_id`?, …
+     * @param array<string, mixed> $lead `contact` (one object: id | phone_number | channel + external_id | email, plus profile for a NEW contact), `pipeline_id`, `stage_id`?, …
      */
     public function create(array $lead, ?string $idempotencyKey = null): Response
     {

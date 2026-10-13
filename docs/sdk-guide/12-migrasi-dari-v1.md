@@ -14,7 +14,7 @@ Tanda tangan v3 berbeda (menutup metode, path, query, dan body) — SDK mengurus
 | v1 (`LegacyClient`) | v3 (`Client`) |
 |---|---|
 | `new PlasgosCrmClient(key, secret, …)` | `new Client(key, secret, …)` (Python: `Client(key, secret, …)`) |
-| `messages.send({ channel, account_id, receiver, content })` | `messages.send({ endpoint_id, recipient, content }, idempotencyKey)` |
+| `messages.send({ channel, account_id, receiver, content })` | `messages.send({ endpoint_id, contact, content }, idempotencyKey)` |
 | `official.messages.sendTemplate(...)` | `messages.send({ …, content: Content.template(id)… })` |
 | `official.broadcasts.create(...)` | `broadcasts.create({ name, endpoint_id, content, audience })` |
 | `accounts.list()` / `official.accounts.list()` | `endpoints.list()` (semua channel dalam satu daftar) |

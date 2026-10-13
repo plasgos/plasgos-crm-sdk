@@ -64,11 +64,11 @@ final class LiveTest extends TestCase
 
         // Two recipients at once is rejected before anything is sent.
         try {
-            $client->messages->send(['endpoint_id' => 'x', 'recipient' => ['contact_id' => 'a', 'phone_number' => '081234567890'], 'content' => Content::text('uji')]);
+            $client->messages->send(['endpoint_id' => 'x', 'contact' => ['id' => 'a', 'phone_number' => '081234567890'], 'content' => Content::text('uji')]);
             self::fail('expected ValidationException');
         } catch (ValidationException $e) {
             self::assertSame('validation_failed', $e->errorCode);
-            self::assertSame('recipient', $e->fields[0]['field']);
+            self::assertSame('contact.id', $e->fields[0]['field']);
         }
     }
 

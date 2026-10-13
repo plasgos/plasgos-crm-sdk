@@ -34,7 +34,7 @@ final class Followups extends AbstractResource
      * 201 enrolled; 200 with `meta['created'] === false` when the contact is still actively enrolled
      * (never scheduled twice). Inactive sequence → ConflictException `followup_not_active`.
      *
-     * @param array<string, mixed> $enrollment `contact_id` OR `contact`, start_at?, client_reference?
+     * @param array<string, mixed> $enrollment `contact` (one object: id | phone_number | channel + external_id | email, plus profile for a NEW contact), start_at?, client_reference?
      */
     public function enroll(string $followupId, array $enrollment, ?string $idempotencyKey = null): Response
     {

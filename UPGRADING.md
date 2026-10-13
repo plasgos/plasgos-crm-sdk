@@ -27,7 +27,7 @@ Unchanged:
 
 | v1 (`LegacyClient`) | v3 (`Client`) |
 |---|---|
-| `messages->send(['channel', 'account_id', 'receiver', 'content' => ['type','data']])` | `messages->send(['endpoint_id', 'recipient' => ['phone_number' \| 'contact_id' \| 'identity'], 'content' => Content::text(...)], idempotencyKey: ...)`; any channel |
+| `messages->send(['channel', 'account_id', 'receiver', 'content' => ['type','data']])` | `messages->send(['endpoint_id', 'contact' => ['phone_number' \| 'id' \| 'channel' + 'external_id' \| 'email'], 'content' => Content::text(...)], idempotencyKey: ...)`; any channel |
 | `official->messages->sendTemplate([...])` | `messages->send([... 'content' => Content::template($id)->dynamic(...)->custom(...)])` |
 | `accounts->list()`, `official->accounts->list()` | `endpoints->list()`, covering every channel and transport |
 | `official->templates->list($accountId)` | `endpoints->templates($endpointId)` |
@@ -50,7 +50,7 @@ on the key. Ask Plasgos to grant them.
 | 1.x | 2.0 |
 |---|---|
 | `new PlasgosCrmClient(key, secret, opts)` (`/api/v1`) | `new Client(key, secret, opts)` (`/api/v3`); the old class is `LegacyClient` (`PlasgosCrmClient` stays as a deprecated alias) |
-| `client.messages.send({ channel, account, receiver, content })` | `client.messages.send({ endpoint_id, recipient, content }, idempotencyKey)` |
+| `client.messages.send({ channel, account, receiver, content })` | `client.messages.send({ endpoint_id, contact, content }, idempotencyKey)` |
 | `client.official.broadcasts.create(...)` | `client.broadcasts.create({ name, endpoint_id, content, audience })` |
 | Envelope `{ status, message, data, metadata }` | `ApiResponse { httpStatus, message, data, meta, requestId, rateLimit, replayed }`, list methods return `Page` |
 | `verifyWebhook(headers, body, { expectedToken })` (`x-hub-token`) | `Webhook.verify(rawBody, headers, signingSecret)` (HMAC `Plasgos-Webhook-Signature`) |
@@ -64,7 +64,7 @@ are `snake_case`.
 | 1.x | 2.0 |
 |---|---|
 | `PlasgosCrmClient(key, secret, **opts)` (`/api/v1`) | `Client(key, secret, **opts)` (`/api/v3`); the old class is `LegacyClient` (`PlasgosCrmClient` stays as a deprecated alias and emits a `DeprecationWarning`) |
-| `client.messages.send(channel=..., account_id=..., receiver=..., content=...)` | `client.messages.send({"endpoint_id": ..., "recipient": ..., "content": ...}, idempotency_key=...)` |
+| `client.messages.send(channel=..., account_id=..., receiver=..., content=...)` | `client.messages.send({"endpoint_id": ..., "contact": ..., "content": ...}, idempotency_key=...)` |
 | `client.official.broadcasts.create(...)` | `client.broadcasts.create({"name": ..., "endpoint_id": ..., "content": ..., "audience": ...})` |
 | `Envelope(status, message, data, metadata)` | `ApiResponse(http_status, message, data, meta, request_id, rate_limit, replayed)`, list methods return `Page` |
 | `verify_webhook(headers, body, expected_token=...)` (`x-hub-token`) | `Webhook.verify(raw_body, headers, signing_secret)` (HMAC `Plasgos-Webhook-Signature`) |

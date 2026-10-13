@@ -51,9 +51,9 @@ export class TemplateVariablesResource extends Resource {
 
 /** `client.messages` — omnichannel sending. Scopes `messages:read` / `messages:write`. */
 export class MessagesResource extends Resource {
-  /** Endpoints that can reach this recipient; exactly one of contact_id, phone_number, channel + external_id (+ endpoint_id). */
-  sendOptions(recipient: Query): Promise<ApiResponse> {
-    return this.http.request("GET", "/messages/send-options", recipient);
+  /** Endpoints that can reach this contact; exactly one of contact_id, phone_number, channel + external_id, or email (+ endpoint_id). */
+  sendOptions(contact: Query): Promise<ApiResponse> {
+    return this.http.request("GET", "/messages/send-options", contact);
   }
 
   /** 202. A message the channel rejected is still 202 with `status = failed` and `error`. */
@@ -82,7 +82,7 @@ export class ContactsResource extends Resource {
     return this.http.request("POST", "/contacts", {}, contact, idempotencyKey);
   }
 
-  /** 201 created / 200 updated (`meta.operation`). Tags and group ids are ADDED; may include `match_on`. */
+  /** 201 created / 200 updated (`meta.created`). Tags and group ids are ADDED; may include `match_on`. */
   upsert(contact: Body, idempotencyKey?: string): Promise<ApiResponse> {
     return this.http.request("POST", "/contacts/upsert", {}, contact, idempotencyKey);
   }

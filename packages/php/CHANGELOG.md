@@ -5,6 +5,11 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [2.0.0] - Unreleased
 
+### API contract 3.0.0-rc.2
+- One `contact` object names "who" in `messages.send`, `leads.create` and `followups.enroll`: `{id}` | `{phone_number, …profile}` | `{channel, external_id}` | `{email}` (replaces `recipient` + `identity` + `create_contact`, and `contact_id` | `contact`). Profile fields only fill a NEW contact. `send-options` / `lookup` queries use the same keys (`send-options` also accepts `email`).
+- `meta.created` everywhere (contact upsert: replaces `meta.operation`; message send: `true`).
+- Malformed `contact` → `422 validation_failed` with field code `invalid_contact`. Error catalog: `components.x-error-codes` in `openapi/openapi-v3.json`.
+
 ### Added
 - `Client` for **API Integrasi v3** (`/api/v3`).
   - Resources: `me`, `channels`, `endpoints` (including templates), `templateVariables`, `messages`

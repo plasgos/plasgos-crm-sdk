@@ -3,8 +3,8 @@
 ## Amplop API
 
 ```json
-{ "success": true, "message": "Kontak dibuat", "data": { "id": "66f1…" }, "meta": { "request_id": "req_…", "operation": "created" } }
-{ "success": false, "message": "Isi permintaan tidak sesuai format", "error": { "code": "validation_failed", "type": "invalid_request", "details": null, "fields": [ { "field": "recipient.phone_number", "code": "required", "message": "Wajib diisi" } ], "doc_url": "…" }, "meta": { "request_id": "req_…" } }
+{ "success": true, "message": "Kontak dibuat", "data": { "id": "66f1…" }, "meta": { "request_id": "req_…", "created": true } }
+{ "success": false, "message": "Isi permintaan tidak sesuai format", "error": { "code": "validation_failed", "type": "invalid_request", "details": null, "fields": [ { "field": "contact.phone_number", "code": "required", "message": "Wajib diisi" } ], "doc_url": "…" }, "meta": { "request_id": "req_…" } }
 ```
 
 ## `ApiResponse`
@@ -14,7 +14,7 @@
 | `httpStatus` | `http_status` | 200, 201, 202 … |
 | `message` | `message` | teks untuk orang (Bahasa Indonesia) |
 | `data` | `data` | isi (format kabel) |
-| `meta` | `meta` | mis. `operation`, `created`, `rejected_recipients` |
+| `meta` | `meta` | mis. `created` (resource baru dibuat?), `contact_created`, `rejected_recipients` |
 | `requestId` | `request_id` | sebutkan saat menghubungi Plasgos |
 | `rateLimit` | `rate_limit` | `limit`, `remaining`, `reset` (detik) |
 | `replayed` | `replayed` | `true` bila server mengulang jawaban pertama untuk Idempotency-Key ini |
@@ -87,12 +87,12 @@ except ConflictError as e:
 | `rate_limited`, `daily_quota_exceeded` | batas per menit (pulih sendiri) / kuota harian habis |
 | `idempotency_in_progress` | permintaan dengan kunci yang sama masih diproses (409) |
 | `idempotency_key_reused`, `idempotency_key_invalid` | kunci sama untuk isi berbeda / format kunci salah (8–255 karakter ASCII) |
-| `validation_failed`, `malformed_json`, `payload_too_large` | isi tak sesuai (lihat `fields`) / JSON rusak / terlalu besar |
+| `validation_failed`, `malformed_json`, `payload_too_large` | isi tak sesuai (lihat `fields`; objek `contact` salah bentuk → kode field `invalid_contact`) / JSON rusak / terlalu besar |
 | `*_not_found` | `endpoint_`, `message_`, `contact_`, `group_`, `pipeline_`, `stage_`, `lead_`, `broadcast_`, `followup_`, `enrollment_`, `webhook_`, `template_` |
 | `requires_template` | WhatsApp resmi di luar jendela 24 jam — kirim template |
 | `identity_taken` | nomor/email sudah milik kontak lain (`details.contact_id`) |
 
-Galat khusus tiap endpoint ada di halaman masing-masing dan di OpenAPI.
+Galat khusus tiap endpoint ada di halaman masing-masing. Katalog lengkap (status & arti setiap kode) ada di OpenAPI: `components.x-error-codes`.
 
 ## Coba ulang otomatis
 

@@ -85,7 +85,7 @@ Method names are `camelCase` in Node and PHP, and `snake_case` in Python. Inputs
 | | `get(endpointId)` | `GET /endpoints/{endpoint_id}` | |
 | | `templates(endpointId, params)` → Page | `GET /endpoints/{endpoint_id}/templates` | |
 | `templateVariables` | `list()` | `GET /template-variables` | `channels:read` |
-| `messages` | `sendOptions(recipient)` | `GET /messages/send-options` | `messages:read` |
+| `messages` | `sendOptions(contact)` | `GET /messages/send-options` | `messages:read` |
 | | `send(input, idempotencyKey?)` → 202 | `POST /messages` | `messages:write` |
 | | `get(messageId)` | `GET /messages/{message_id}` | `messages:read` |
 | `contacts` | `list(params)` → Page | `GET /contacts` | `contacts:read` |
