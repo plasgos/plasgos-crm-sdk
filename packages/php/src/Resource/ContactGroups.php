@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plasgos\CrmSdk\Resource;
 
 use Plasgos\CrmSdk\Page;
+use Plasgos\CrmSdk\RequestOptions;
 
 /** `$client->contactGroups` — broadcast audiences. Scope `contacts:read`. */
 final class ContactGroups extends AbstractResource

@@ -281,6 +281,30 @@ final class ClientTest extends TestCase
         self::assertSame([2.5, 1.0], $seen);
     }
 
+    public function testEveryResourceMethodTakesRequestOptionsLast(): void
+    {
+        $count = 0;
+        foreach (glob(__DIR__ . '/../src/Resource/*.php') as $file) {
+            $class = 'Plasgos\\CrmSdk\\Resource\\' . basename($file, '.php');
+            $reflection = new \ReflectionClass($class);
+            if ($reflection->isAbstract()) {
+                continue;
+            }
+            foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+                if ($method->isConstructor() || $method->getDeclaringClass()->getName() !== $class) {
+                    continue;
+                }
+                $params = $method->getParameters();
+                $last = end($params);
+                self::assertNotFalse($last, "{$class}::{$method->getName()}");
+                self::assertSame('options', $last->getName(), "{$class}::{$method->getName()}");
+                self::assertSame('?' . RequestOptions::class, (string) $last->getType(), "{$class}::{$method->getName()}");
+                $count++;
+            }
+        }
+        self::assertSame(35, $count);
+    }
+
     public function testTimeoutPerCallNeedsGuzzle(): void
     {
         $this->expectException(\LogicException::class);
