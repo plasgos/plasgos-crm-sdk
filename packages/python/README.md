@@ -111,6 +111,17 @@ r.replayed     # True when the server replayed the first response for this Idemp
 List methods return a `Page`: `items`, `pagination`, `has_next_page()`, `next_page()`,
 `auto_paging()` (generator); it is iterable over the current page and supports `len()`.
 
+Request bodies, query parameters and `data` are typed with `TypedDict`s generated from the OpenAPI spec
+(checked by mypy/pyright; plain dicts at runtime):
+
+```python
+from plasgos_crm.v3 import types as t
+
+sent = client.messages.send({"endpoint_id": "…", "contact": {"phone_number": "0812…"}, "content": Content.text("Halo")})
+status: t.MessageStatus = sent.data["status"]
+page = client.contacts.list({"tag": "vip"})  # Page[t.Contact]
+```
+
 ## Errors
 
 ```

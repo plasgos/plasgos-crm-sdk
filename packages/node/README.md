@@ -106,6 +106,18 @@ r.replayed;   // true when the server replayed the first response for this Idemp
 List methods return a `Page`: `items`, `pagination`, `hasNextPage()`, `nextPage()`, `autoPaging()`
 (async iterator), and it is iterable over the current page.
 
+Everything is typed from the OpenAPI spec (generated, never hand-written):
+
+```ts
+import { Client, type Types } from "plasgos-crm-sdk";
+
+const sent = await client.messages.send({ endpoint_id: "…", contact: { phone_number: "0812…" }, content: Content.text("Halo") });
+sent.data.status;            // Types.MessageStatus
+sent.meta.contact_created;   // boolean
+const page = await client.contacts.list({ tag: "vip" }); // Page<Types.Contact>
+type Body = Types.Operations["createLead"]["body"];
+```
+
 ## Errors
 
 ```

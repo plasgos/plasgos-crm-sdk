@@ -1,6 +1,8 @@
 // ——— API Integration v3 (SDK 2.x) ———
 export { Client, type ClientV3Options } from "./v3/client.js";
 export { ApiResponse, Page, type Pagination, type RateLimit } from "./v3/response.js";
+/** Tipe API v3 dari OpenAPI (format kabel): `Types.Contact`, `Types.Message`, `Types.Operations["sendMessage"]["body"]`, … */
+export type * as Types from "./v3/types.gen.js";
 export {
   Content,
   TemplateContent,

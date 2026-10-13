@@ -6,11 +6,17 @@ on:
     paths:
       - "packages/python/**"
       - "docs/vectors.json"
+      - "docs/vectors-v3.json"
+      - "openapi/openapi-v3.json"
+      - "scripts/generate-types.mjs"
       - ".github/workflows/python.yml"
   pull_request:
     paths:
       - "packages/python/**"
       - "docs/vectors.json"
+      - "docs/vectors-v3.json"
+      - "openapi/openapi-v3.json"
+      - "scripts/generate-types.mjs"
       - ".github/workflows/python.yml"
 
 defaults:
@@ -31,5 +37,8 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -q
       - run: ruff check .
-      - run: mypy src
+      - run: mypy src tests/test_v3_types.py
         if: ${{ matrix.python == '3.12' }}
+      - name: Tipe sinkron dengan openapi-v3.json
+        if: ${{ matrix.python == '3.12' }}
+        run: node ../../scripts/generate-types.mjs --check

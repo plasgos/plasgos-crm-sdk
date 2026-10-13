@@ -18,12 +18,15 @@ class RateLimit:
 
 
 @dataclass(frozen=True)
-class ApiResponse:
-    """A single v3 result (docs/SDK_SPEC.md §4.1). ``data`` keeps the wire format (snake_case)."""
+class ApiResponse(Generic[T]):
+    """A single v3 result (docs/SDK_SPEC.md §4.1). ``data`` keeps the wire format (snake_case).
+
+    ``ApiResponse[Contact]`` — ``data`` typed from OpenAPI (:mod:`plasgos_crm.v3.types`).
+    """
 
     http_status: int
     message: str
-    data: Any
+    data: T
     meta: dict[str, Any] = field(default_factory=dict)
     request_id: Optional[str] = None
     rate_limit: RateLimit = field(default_factory=RateLimit)
@@ -43,7 +46,7 @@ class Page(Generic[T]):
             ...
     """
 
-    def __init__(self, response: ApiResponse, fetch_page: Callable[[int], "Page[T]"]) -> None:
+    def __init__(self, response: ApiResponse[Any], fetch_page: Callable[[int], "Page[T]"]) -> None:
         self.response = response
         self._fetch_page = fetch_page
         self.items: list[T] = list(response.data) if isinstance(response.data, list) else []

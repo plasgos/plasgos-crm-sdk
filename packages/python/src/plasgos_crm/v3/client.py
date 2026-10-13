@@ -111,7 +111,7 @@ class Client:
         query: Optional[Query] = None,
         body: Any = None,
         idempotency_key: Optional[str] = None,
-    ) -> ApiResponse:
+    ) -> ApiResponse[Any]:
         """Escape hatch for endpoints without a resource method yet."""
         return self._http.request(method, path, query, body, idempotency_key)
 

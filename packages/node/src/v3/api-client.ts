@@ -42,7 +42,7 @@ const RETRY_CAP_MS = 8000;
 export class ApiClient {
   constructor(private readonly config: ApiClientConfig) {}
 
-  async request<T = any>(method: Method, path: string, query: Query = {}, body?: unknown, idempotencyKey?: string | null): Promise<ApiResponse<T>> {
+  async request<T = any, M = Record<string, any>>(method: Method, path: string, query: Query = {}, body?: unknown, idempotencyKey?: string | null): Promise<ApiResponse<T, M>> {
     const verb = method.toUpperCase() as Method;
     const queryString = buildQuery(query);
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}${PREFIX}/${path.replace(/^\//, "")}${queryString ? `?${queryString}` : ""}`;
@@ -55,7 +55,7 @@ export class ApiClient {
 
     for (let attempt = 0; ; attempt++) {
       try {
-        return await this.attempt<T>(verb, url, requestTarget, rawBody, key);
+        return await this.attempt<T, M>(verb, url, requestTarget, rawBody, key);
       } catch (error) {
         const wait = error instanceof PlasgosApiError ? this.retryWait(error, verb, attempt) : null;
         if (wait === null) throw error;
@@ -69,7 +69,7 @@ export class ApiClient {
     return new Page<T>(response, (page) => this.requestPage<T>(path, { ...query, page }));
   }
 
-  private async attempt<T>(method: Method, url: string, requestTarget: string, rawBody: string, idempotencyKey: string | null): Promise<ApiResponse<T>> {
+  private async attempt<T, M>(method: Method, url: string, requestTarget: string, rawBody: string, idempotencyKey: string | null): Promise<ApiResponse<T, M>> {
     const headers: Record<string, string> = {
       Accept: "application/json",
       "User-Agent": this.config.userAgent,
@@ -92,7 +92,7 @@ export class ApiClient {
     } finally {
       clearTimeout(timer);
     }
-    return parse<T>(response.status, lowerHeaders(response.headers), await response.text());
+    return parse<T, M>(response.status, lowerHeaders(response.headers), await response.text());
   }
 
   /** Milliseconds to wait before retrying, or null when this error is not retried (§6). */
@@ -115,7 +115,7 @@ export class ApiClient {
 }
 
 /** Parse a v3 response or throw a typed error (§4, §5). */
-export function parse<T>(status: number, headers: Record<string, string>, text: string): ApiResponse<T> {
+export function parse<T, M = Record<string, any>>(status: number, headers: Record<string, string>, text: string): ApiResponse<T, M> {
   const requestId = headers["x-request-id"] ?? null;
   let body: Record<string, any> | null = null;
   if (text !== "") {
@@ -144,7 +144,7 @@ export function parse<T>(status: number, headers: Record<string, string>, text: 
 
   const meta = body && typeof body.meta === "object" && body.meta !== null ? body.meta : {};
   const int = (value: string | undefined): number | null => (value === undefined || value === "" ? null : Number.parseInt(value, 10));
-  return new ApiResponse<T>(
+  return new ApiResponse<T, M>(
     status,
     typeof body?.message === "string" ? body.message : "",
     (body?.data ?? null) as T,

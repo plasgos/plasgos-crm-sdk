@@ -170,6 +170,21 @@ A `Page` wraps a list `Response`:
   `page` changed.
 - The page is iterable and countable over the current `items`.
 
+### 4.3 Types
+
+Request and response types are **generated** from `openapi/openapi-v3.json` by
+`scripts/generate-types.mjs` and never edited by hand; CI runs it with `--check`, so the types cannot
+drift from the API.
+
+| | Node | Python | PHP |
+|---|---|---|---|
+| Schemas | `Types.Contact`, `Types.Message`, … (`export type * as Types`) | `plasgos_crm.v3.types` (`TypedDict`) | arrays (wire format) |
+| Per operation | `Types.Operations["sendMessage"]` → `query`, `body`, `data`, `meta` (+ `item` for lists) | `SendMessageBody`, `ListContactsQuery`, `GetContactData`, `ListContactsItem`, `SendMessageMeta` | — |
+| Resource methods | params, body, `ApiResponse<data, meta>` and `Page<item>` typed | params, body, `ApiResponse[Data]` and `Page[Item]` typed | — |
+
+Fields that take a content builder (`content` of `messages.send` and `broadcasts.create`) also accept
+`TemplateContent`. Python `Content.text()` / `media()` return the matching `TypedDict`.
+
 ## 5. Error mapping
 
 Errors use the envelope `{ success:false, message, error:{ code, type, details, fields, doc_url }, meta:{ request_id } }`.

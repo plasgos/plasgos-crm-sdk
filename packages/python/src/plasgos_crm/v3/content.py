@@ -9,7 +9,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
+
+if TYPE_CHECKING:
+    from . import types as _t
 
 __all__ = ["Content", "TemplateContent", "MEDIA_TYPES"]
 
@@ -39,14 +42,14 @@ class TemplateContent:
         self._location = {"latitude": latitude, "longitude": longitude, "name": name, "address": address}
         return self
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> _t.ContentTemplate:
         template: dict[str, Any] = {
             "template_id": self._template_id,
             "variables": [dict(v) for v in self._variables],
         }
         if self._location is not None:
             template["location"] = dict(self._location)
-        return {"type": "template", "template": template}
+        return cast("_t.ContentTemplate", {"type": "template", "template": template})
 
     def _variable(self, param: str, kind: str, value: str) -> "TemplateContent":
         entry = {"param": param, "type": kind, "value": value}
@@ -60,7 +63,7 @@ class TemplateContent:
 
 class Content:
     @staticmethod
-    def text(body: str, preview_url: bool = False) -> dict[str, Any]:
+    def text(body: str, preview_url: bool = False) -> _t.ContentText:
         return {"type": "text", "text": {"body": body, "preview_url": preview_url}}
 
     @staticmethod
@@ -70,24 +73,24 @@ class Content:
         caption: Optional[str] = None,
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> _t.ContentMedia:
         if type not in MEDIA_TYPES:
             raise ValueError("Content.media type must be one of image, video, audio, document")
-        return {
-            "type": type,
-            "media": {"url": url, "caption": caption, "file_name": file_name, "mime_type": mime_type},
-        }
+        return cast(
+            "_t.ContentMedia",
+            {"type": type, "media": {"url": url, "caption": caption, "file_name": file_name, "mime_type": mime_type}},
+        )
 
     @staticmethod
-    def image(url: str, caption: Optional[str] = None) -> dict[str, Any]:
+    def image(url: str, caption: Optional[str] = None) -> _t.ContentMedia:
         return Content.media("image", url, caption)
 
     @staticmethod
-    def video(url: str, caption: Optional[str] = None) -> dict[str, Any]:
+    def video(url: str, caption: Optional[str] = None) -> _t.ContentMedia:
         return Content.media("video", url, caption)
 
     @staticmethod
-    def document(url: str, file_name: Optional[str] = None, caption: Optional[str] = None) -> dict[str, Any]:
+    def document(url: str, file_name: Optional[str] = None, caption: Optional[str] = None) -> _t.ContentMedia:
         return Content.media("document", url, caption, file_name)
 
     @staticmethod

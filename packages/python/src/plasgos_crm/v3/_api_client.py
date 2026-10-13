@@ -75,7 +75,7 @@ class ApiClient:
         query: Optional[Query] = None,
         body: Any = None,
         idempotency_key: Optional[str] = None,
-    ) -> ApiResponse:
+    ) -> ApiResponse[Any]:
         verb = method.upper()
         query_string = build_query(query or {})
         url = f"{self._base_url}{PREFIX}/{path.lstrip('/')}" + (f"?{query_string}" if query_string else "")
@@ -104,7 +104,7 @@ class ApiClient:
 
     def _attempt(
         self, method: str, url: str, request_target: str, raw_body: bytes, idempotency_key: Optional[str]
-    ) -> ApiResponse:
+    ) -> ApiResponse[Any]:
         headers = {
             "Accept": "application/json",
             "User-Agent": self._user_agent,
@@ -145,7 +145,7 @@ class ApiClient:
         return None
 
 
-def parse(status: int, headers: Mapping[str, str], text: str) -> ApiResponse:
+def parse(status: int, headers: Mapping[str, str], text: str) -> ApiResponse[Any]:
     """Parse a v3 response or raise a typed error (§4, §5). ``headers`` keys are lower-case."""
     request_id = headers.get("x-request-id")
     body: Optional[dict[str, Any]] = None

@@ -1,7 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   AuthenticationError,
   BadRequestError,
@@ -20,6 +20,8 @@ import {
   TransportError,
   ValidationError,
   buildQuery,
+  type Page,
+  type Types,
   signV3,
   stringToSign,
 } from "../src/index.js";
@@ -76,10 +78,10 @@ describe("signing (SDK_SPEC §2)", () => {
 
   it("signs method, path and the exact body bytes sent", async () => {
     const { client: c, requests } = client([{ status: 202, body: { success: true, message: "x", data: { id: "m1" }, meta: {} } }]);
-    await c.messages.send({ endpoint_id: "e1", content: Content.text("Halo https://x/y ✓") }, "key-1");
+    await c.messages.send({ endpoint_id: "e1", contact: { id: "c1" }, content: Content.text("Halo https://x/y ✓") }, "key-1");
     const r = requests[0]!;
     expect(r.url).toBe("https://crm.example/api/v3/messages");
-    expect(r.body).toBe('{"endpoint_id":"e1","content":{"type":"text","text":{"body":"Halo https://x/y ✓","preview_url":false}}}');
+    expect(r.body).toBe('{"endpoint_id":"e1","contact":{"id":"c1"},"content":{"type":"text","text":{"body":"Halo https://x/y ✓","preview_url":false}}}');
     const sts = `${r.headers["Plasgos-Timestamp"]}\nPOST\n/api/v3/messages\n${createHash("sha256").update(r.body).digest("hex")}`;
     expect(r.headers["Plasgos-Signature"]).toBe(`v1=${createHmac("sha256", "sk_test").update(sts).digest("hex")}`);
     expect(r.headers["Plasgos-Api-Key"]).toBe("ak_test");
@@ -88,6 +90,7 @@ describe("signing (SDK_SPEC §2)", () => {
 
   it("signs the query as sent (RFC 3986, nulls dropped, booleans)", async () => {
     const { client: c, requests } = client([ok([])]);
+    // @ts-expect-error — sengaja di luar tipe: null & string kosong dibuang, kunci tak dikenal tetap dikirim apa adanya
     await c.contacts.list({ search: "budi santoso", tag: null, ready: true, page: 2, empty: "" });
     expect(requests[0]!.url).toBe("https://crm.example/api/v3/contacts?search=budi%20santoso&ready=true&page=2");
     expect(buildQuery({ q: "a!b*(c)'" })).toBe("q=a%21b%2A%28c%29%27");
@@ -145,13 +148,13 @@ describe("idempotency & retries (SDK_SPEC §6)", () => {
     await read.client.me.get();
     expect(read.requests).toHaveLength(2);
     const write = client([fail(500, "internal_error", "api_error")]);
-    await expect(write.client.leads.create({ contact: { id: "c" } })).rejects.toBeInstanceOf(ServerError);
+    await expect(write.client.leads.create({ contact: { id: "c" }, pipeline_id: "pl_1" })).rejects.toBeInstanceOf(ServerError);
     expect(write.requests).toHaveLength(1);
   });
 
   it("502 is retried for writes too; 4xx never", async () => {
     const channel = client([fail(502, "channel_provider_error", "channel_error"), ok()]);
-    await channel.client.messages.send({});
+    await channel.client.messages.send({ endpoint_id: "e1", contact: { id: "c1" }, content: Content.text("x") });
     expect(channel.requests).toHaveLength(2);
     const conflict = client([fail(409, "identity_taken", "conflict")]);
     await expect(conflict.client.contacts.create({})).rejects.toBeInstanceOf(ConflictError);
@@ -268,5 +271,22 @@ describe("construction", () => {
   it("rejects missing credentials", () => {
     expect(() => new Client("", "s")).toThrow(TypeError);
     expect(() => new Client("k", "")).toThrow(TypeError);
+  });
+});
+
+describe("tipe mengikuti OpenAPI (diperiksa tsc)", () => {
+  it("data, meta, item halaman, query & body bertipe per operasi", () => {
+    const c = new Client("ak", "sk", { baseUrl: "https://crm.example" });
+    type Data<F extends (...args: any[]) => Promise<{ data: unknown }>> = Awaited<ReturnType<F>>["data"];
+    type MetaOf<F extends (...args: any[]) => Promise<{ meta: unknown }>> = Awaited<ReturnType<F>>["meta"];
+    expectTypeOf<Data<typeof c.messages.send>["status"]>().toEqualTypeOf<Types.MessageStatus>();
+    expectTypeOf<MetaOf<typeof c.messages.send>["contact_created"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<MetaOf<typeof c.contacts.upsert>["created"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<Awaited<ReturnType<typeof c.contacts.list>>>().toEqualTypeOf<Page<Types.Contact>>();
+    expectTypeOf<Data<typeof c.me.get>["scopes"]>().toEqualTypeOf<Types.Scope[]>();
+    expectTypeOf<Parameters<typeof c.messages.send>[0]["contact"]>().toEqualTypeOf<Types.ContactRef>();
+    // Builder template diterima di body pesan & broadcast.
+    expectTypeOf(Content.template("tpl")).toMatchTypeOf<Parameters<typeof c.messages.send>[0]["content"]>();
+    expectTypeOf(Content.template("tpl")).toMatchTypeOf<Parameters<typeof c.broadcasts.create>[0]["content"]>();
   });
 });

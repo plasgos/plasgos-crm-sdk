@@ -20,6 +20,18 @@
 | `replayed` | `replayed` | `true` bila server mengulang jawaban pertama untuk Idempotency-Key ini |
 | `header(name)` | `header(name)` | header respons apa pun |
 
+## Tipe
+
+Tipe permintaan & respons **dibangkitkan dari OpenAPI** (`scripts/generate-types.mjs`, diperiksa CI),
+jadi selalu sama dengan API:
+
+- **Node:** `import { type Types } from "plasgos-crm-sdk"` → `Types.Contact`, `Types.Message`,
+  `Types.Operations["sendMessage"]["body"]`. Setiap metode resource sudah bertipe (`data`, `meta`, item
+  `Page`).
+- **Python:** `from plasgos_crm.v3 import types as t` → `t.Contact`, `t.SendMessageBody`,
+  `t.ListContactsQuery` (TypedDict); `ApiResponse[t.Contact]`, `Page[t.Contact]`.
+- **PHP:** larik format kabel (bentuk persis seperti OpenAPI).
+
 ## `Page` (metode daftar)
 
 - `items` — isi halaman ini; `pagination` — `page`, `per_page`, `total`, `total_pages`, `has_next_page`, `has_prev_page`.

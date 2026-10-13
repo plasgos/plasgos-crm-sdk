@@ -6,11 +6,17 @@ on:
     paths:
       - "packages/node/**"
       - "docs/vectors.json"
+      - "docs/vectors-v3.json"
+      - "openapi/openapi-v3.json"
+      - "scripts/generate-types.mjs"
       - ".github/workflows/node.yml"
   pull_request:
     paths:
       - "packages/node/**"
       - "docs/vectors.json"
+      - "docs/vectors-v3.json"
+      - "openapi/openapi-v3.json"
+      - "scripts/generate-types.mjs"
       - ".github/workflows/node.yml"
 
 defaults:
@@ -31,6 +37,8 @@ jobs:
           cache: npm
           cache-dependency-path: packages/node/package-lock.json
       - run: npm ci
+      - name: Tipe sinkron dengan openapi-v3.json
+        run: node ../../scripts/generate-types.mjs --check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

@@ -16,12 +16,12 @@ export interface Pagination {
 }
 
 /** A single v3 result (docs/SDK_SPEC.md §4.1). `data` keeps the wire format (snake_case). */
-export class ApiResponse<T = any> {
+export class ApiResponse<T = any, M = Record<string, any>> {
   constructor(
     readonly httpStatus: number,
     readonly message: string,
     readonly data: T,
-    readonly meta: Record<string, any>,
+    readonly meta: M,
     readonly requestId: string | null,
     readonly rateLimit: RateLimit,
     readonly replayed: boolean,
