@@ -217,6 +217,31 @@ describe("per-call options (SDK_SPEC §1.1)", () => {
   });
 });
 
+describe("logging (SDK_SPEC §1.2)", () => {
+  it("one event per attempt, without headers, query or body", async () => {
+    const events: any[] = [];
+    const { client: c } = client([fail(503, "service_unavailable", "service_unavailable"), ok({ id: "c1" }, { request_id: "req_ok" })], {
+      logger: (e: unknown) => events.push(e),
+    });
+    await c.contacts.list({ search: "0812345" });
+    expect(events).toEqual([
+      { method: "GET", path: "/api/v3/contacts", attempt: 1, status: 503, durationMs: expect.any(Number), requestId: "req_err", errorCode: "service_unavailable", retryInMs: expect.any(Number) },
+      { method: "GET", path: "/api/v3/contacts", attempt: 2, status: 200, durationMs: expect.any(Number), requestId: "req_ok", errorCode: null, retryInMs: null },
+    ]);
+    const text = JSON.stringify(events);
+    for (const secret of ["ak_test", "sk_test", "0812345", "v1="]) expect(text).not.toContain(secret);
+  });
+
+  it("transport errors have no status; a throwing logger does not break the call", async () => {
+    const events: any[] = [];
+    const { client: c } = client([new TypeError("down")], { maxRetries: 0, logger: (e: unknown) => events.push(e) });
+    await expect(c.me.get()).rejects.toBeInstanceOf(TransportError);
+    expect(events[0]).toMatchObject({ status: null, errorCode: "transport_error", retryInMs: null });
+    const broken = client([ok()], { logger: () => { throw new Error("log sink down"); } });
+    await expect(broken.client.me.get()).resolves.toMatchObject({ httpStatus: 200 });
+  });
+});
+
 describe("errors (SDK_SPEC §5)", () => {
   it("maps the v3 envelope onto every field", async () => {
     const { client: c } = client([

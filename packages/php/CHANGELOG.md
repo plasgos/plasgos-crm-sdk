@@ -15,6 +15,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - An empty `custom_fields` (PHP decodes `{}` as `[]`) is sent as a JSON object, so `contacts->update($id, ['custom_fields' => $contact->data['custom_fields']])` no longer fails with 422.
 
 ### Added
+- `ClientConfig(logger:)` takes a PSR-3 logger (docs/SDK_SPEC.md §1.2; new dependency `psr/log`, interfaces only): one `debug` record per attempt with method, path (no query), status, duration, request id, error code and retry wait; never headers or bodies.
 - Per-call options (`RequestOptions`, docs/SDK_SPEC.md §1.1) as the last argument of every resource method and `$client->request()`: `timeout` (default Guzzle transport; a custom PSR-18 client gets a `LogicException`), `maxRetries`, `headers`. Next pages of `autoPaging()` keep them. Headers the SDK owns (signing, `Idempotency-Key`, `Content-Type`, …) are rejected.
 - `Client` for **API Integrasi v3** (`/api/v3`).
   - Resources: `me`, `channels`, `endpoints` (including templates), `templateVariables`, `messages`

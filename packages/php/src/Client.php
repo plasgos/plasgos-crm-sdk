@@ -79,6 +79,7 @@ final class Client
                 usleep((int) round($seconds * 1_000_000));
             },
             clock: $config->clock ?? static fn (): int => time(),
+            logger: $config->logger,
         );
 
         $this->me = new Me($this->http);

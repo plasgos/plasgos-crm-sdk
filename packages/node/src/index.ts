@@ -14,7 +14,7 @@ export {
   type TemplateLocation,
 } from "./v3/content.js";
 export { signV3, signatureHeadersV3, stringToSign, type V3SignatureHeaders } from "./v3/signature.js";
-export { buildQuery, type KeyOrOptions, type Method, type Query, type RequestOptions } from "./v3/api-client.js";
+export { buildQuery, type KeyOrOptions, type Method, type Query, type RequestLogEvent, type RequestOptions } from "./v3/api-client.js";
 export { Webhook, WebhookEventType, type WebhookEventV3, type WebhookEventTypeName } from "./v3/webhook.js";
 export { SDK_VERSION } from "./version.js";
 

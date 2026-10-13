@@ -22,6 +22,7 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * HTTP layer for API v3 (`/api/v3/*`): signing, idempotency, retry policy, envelope parsing.
@@ -53,6 +54,7 @@ final class ApiClient
         private readonly int $maxRetryWait,
         private readonly \Closure $sleeper,
         private readonly \Closure $clock,
+        private readonly ?LoggerInterface $logger = null,
     ) {}
 
     /**
@@ -77,11 +79,17 @@ final class ApiClient
             $idempotencyKey = self::uuid4();
         }
 
+        $logPath = explode('?', $requestTarget, 2)[0];
+
         for ($attempt = 0; ; $attempt++) {
+            $started = hrtime(true);
             try {
-                return $this->attempt($method, $url, $requestTarget, $rawBody, $idempotencyKey, $options);
+                $response = $this->attempt($method, $url, $requestTarget, $rawBody, $idempotencyKey, $options);
+                $this->logAttempt($method, $logPath, $attempt, $started, $response->httpStatus, $response->requestId, null, null);
+                return $response;
             } catch (PlasgosApiException $e) {
                 $wait = $this->retryWait($e, $method, $attempt, $maxRetries);
+                $this->logAttempt($method, $logPath, $attempt, $started, $e->httpStatus ?: null, $e->requestId, $e->errorCode, $wait);
                 if ($wait === null) {
                     throw $e;
                 }
@@ -192,6 +200,35 @@ final class ApiClient
             replayed: strtolower($headers['idempotent-replayed'] ?? '') === 'true',
             headers: $headers,
         );
+    }
+
+    /**
+     * One debug record per attempt (docs/SDK_SPEC.md §1.2): method, path without the query, status,
+     * duration, request id, error code and retry wait — never headers or bodies, so keys, signatures,
+     * phone numbers and message text cannot leak.
+     */
+    private function logAttempt(string $method, string $path, int $attempt, int|float $started, ?int $status, ?string $requestId, ?string $errorCode, ?float $retryIn): void
+    {
+        if ($this->logger === null) {
+            return;
+        }
+        $context = [
+            'method' => $method,
+            'path' => $path,
+            'attempt' => $attempt + 1,
+            'status' => $status,
+            'duration_ms' => (int) round((hrtime(true) - $started) / 1e6),
+            'request_id' => $requestId,
+            'error_code' => $errorCode,
+            'retry_in_ms' => $retryIn === null ? null : (int) round($retryIn * 1000),
+        ];
+        $outcome = $status ?? $errorCode;
+        $retry = $retryIn === null ? '' : ", retrying in {$context['retry_in_ms']} ms";
+        try {
+            $this->logger->debug("Plasgos CRM {$method} {$path} attempt {$context['attempt']} -> {$outcome} in {$context['duration_ms']} ms{$retry}", $context);
+        } catch (\Throwable) {
+            // A broken logger must not break the call.
+        }
     }
 
     /**

@@ -8,6 +8,7 @@ use Plasgos\CrmSdk\Enum\BaseUrl;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Optional configuration for {@see Client} / {@see CredentialsClient}.
@@ -29,6 +30,8 @@ final class ClientConfig
         public readonly ?StreamFactoryInterface $streamFactory = null,
         /** v3: longest `Retry-After` (seconds) the client waits automatically; longer ones are thrown. */
         public readonly int $maxRetryWait = 30,
+        /** v3: one debug record per attempt — method, path, status, duration, request id; never headers or bodies (SDK_SPEC §1.2). */
+        public readonly ?LoggerInterface $logger = null,
         /** Testing hook: fn(float $seconds): void — defaults to usleep. */
         public readonly ?\Closure $sleeper = null,
         /** Testing hook: fn(): int unix seconds — defaults to time(). */

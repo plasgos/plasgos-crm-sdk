@@ -34,6 +34,7 @@ CredentialsClient(accessToken, fingerprint, options)  # unchanged, /v2/integrati
 | `maxRetryWait` | 30 s | Longest `Retry-After` honoured automatically; longer ones are raised to the caller. |
 | `userAgent` | `plasgos-crm-sdk-<lang>/<version> <runtime>/<version>` | Sent as `User-Agent`. Integrations append themselves, e.g. `plasgos-wordpress/1.0.0 (+https://shop.example)`. |
 | transport | platform default | Injectable HTTP client (PSR-18, `fetch`, `httpx`). |
+| `logger` | none | Per-attempt log hook (§1.2). Python uses the `plasgos_crm` stdlib logger instead. |
 | `sleeper`, `clock` | real | Test hooks for retry waits and the signing timestamp. |
 
 ### 1.1 Per-call options
@@ -52,6 +53,32 @@ call only, including its retries and, for lists, every page `autoPaging()` fetch
 Headers owned by the SDK are rejected (Node `TypeError`, PHP `InvalidArgumentException`, Python
 `ValueError`): `Accept`, `User-Agent`, `Plasgos-Api-Key`, `Plasgos-Timestamp`, `Plasgos-Signature`,
 `Idempotency-Key`, `Content-Type`, `Content-Length`, `Host`.
+
+### 1.2 Logging
+
+The SDK records **one event per attempt** with these fields:
+
+| Field | Meaning |
+|---|---|
+| `method` | HTTP method |
+| `path` | Path **without the query**, e.g. `/api/v3/contacts/c_1` |
+| `attempt` | 1 for the first try |
+| `status` | HTTP status, `null` when no response arrived |
+| `duration_ms` | Time of this attempt |
+| `request_id` | Server request id, when known |
+| `error_code` | `errorCode` of the error, `null` on success |
+| `retry_in_ms` | Wait before the next retry, `null` when this attempt is final |
+
+Headers, the query and the body are **never** logged, so the API key, the signature, phone numbers,
+e-mail addresses and message text cannot leak into logs.
+
+| | Hook | Level |
+|---|---|---|
+| Node | `logger: (event) => void` option (camelCase fields) | — |
+| PHP | `ClientConfig(logger: LoggerInterface)` (PSR-3), fields in the context | `debug` |
+| Python | stdlib `logging.getLogger("plasgos_crm")`, fields in `record.plasgos_crm` | `DEBUG` |
+
+An exception thrown by the logger is swallowed; it never breaks the call.
 
 The base URLs are:
 

@@ -152,6 +152,7 @@ new ClientConfig(
     maxRetries: 2,
     maxRetryWait: 30,
     userAgent: 'my-app/1.0 plasgos-crm-sdk-php/2.0.0',
+    logger: $psr3Logger,               // one debug record per attempt; never headers or bodies
 );
 ```
 

@@ -6,8 +6,10 @@ See docs/SDK_SPEC.md §2, §4–§6.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
+import time
 import uuid
 from typing import Any, Callable, Mapping, Optional, TypedDict, Union
 from urllib.parse import quote
@@ -51,6 +53,11 @@ _RESERVED_HEADERS = frozenset(
 )
 
 PREFIX = "/api/v3"
+
+# One DEBUG record per attempt (docs/SDK_SPEC.md §1.2): method, path without the query, status,
+# duration, request id, error code and retry wait — never headers or bodies, so keys, signatures,
+# phone numbers and message text cannot leak. The fields are also in ``record.plasgos_crm``.
+logger = logging.getLogger("plasgos_crm")
 _RETRY_BASE = 0.5
 _RETRY_CAP = 8.0
 _SCHEME_HOST = re.compile(r"^[a-z][a-z0-9+.-]*://[^/]+", re.IGNORECASE)
@@ -107,17 +114,23 @@ class ApiClient:
         # One key per intent: generated once here and reused by every retry.
         key = idempotency_key if idempotency_key is not None else (str(uuid.uuid4()) if verb == "POST" else None)
         max_retries = opts.get("max_retries", self._max_retries)
+        log_path = request_target.split("?", 1)[0]
 
         attempt = 0
         while True:
+            started = time.monotonic()
             try:
-                return self._attempt(verb, url, request_target, raw_body, key, opts)
+                response = self._attempt(verb, url, request_target, raw_body, key, opts)
             except PlasgosApiError as error:
                 wait = self._retry_wait(error, verb, attempt, max_retries)
+                _log_attempt(verb, log_path, attempt, started, error.http_status or None, error.request_id, error.error_code, wait)
                 if wait is None:
                     raise
                 self._sleeper(wait)
                 attempt += 1
+            else:
+                _log_attempt(verb, log_path, attempt, started, response.http_status, response.request_id, None, None)
+                return response
 
     def request_page(self, path: str, query: Optional[Query] = None, options: Optional[RequestOptions] = None) -> Page[Any]:
         params = dict(query or {})
@@ -167,6 +180,40 @@ class ApiClient:
         if transient or (method == "GET" and isinstance(error, ServerError)):
             return _backoff(attempt)
         return None
+
+
+def _log_attempt(
+    method: str,
+    path: str,
+    attempt: int,
+    started: float,
+    status: Optional[int],
+    request_id: Optional[str],
+    error_code: Optional[str],
+    retry_in: Optional[float],
+) -> None:
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    event = {
+        "method": method,
+        "path": path,
+        "attempt": attempt + 1,
+        "status": status,
+        "duration_ms": round((time.monotonic() - started) * 1000),
+        "request_id": request_id,
+        "error_code": error_code,
+        "retry_in_ms": None if retry_in is None else round(retry_in * 1000),
+    }
+    logger.debug(
+        "%s %s attempt %d -> %s in %d ms%s",
+        method,
+        path,
+        event["attempt"],
+        status if status is not None else error_code,
+        event["duration_ms"],
+        "" if retry_in is None else f", retrying in {event['retry_in_ms']} ms",
+        extra={"plasgos_crm": event},
+    )
 
 
 def _check_options(options: Optional[RequestOptions]) -> RequestOptions:

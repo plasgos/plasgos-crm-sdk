@@ -1,4 +1,4 @@
-import { ApiClient, type KeyOrOptions, type Method, type Query } from "./api-client.js";
+import { ApiClient, type KeyOrOptions, type Method, type Query, type RequestLogEvent } from "./api-client.js";
 import type { ApiResponse } from "./response.js";
 import {
   BroadcastsResource,
@@ -28,6 +28,12 @@ export interface ClientV3Options {
   maxRetryWait?: number;
   /** Sent as `User-Agent`; integrations append themselves. */
   userAgent?: string;
+  /**
+   * Called once per attempt with method, path (no query), status, duration, request id, error code and
+   * the retry wait — never headers or bodies (docs/SDK_SPEC.md §1.2).
+   * `logger: (e) => console.debug("plasgos", e)`.
+   */
+  logger?: (event: RequestLogEvent) => void;
   /** Injectable fetch (defaults to the global one). */
   fetch?: typeof fetch;
   /** Test hook: wait `ms` milliseconds between retries. */
@@ -76,6 +82,7 @@ export class Client {
       maxRetryWait: options.maxRetryWait ?? 30,
       userAgent: options.userAgent ?? `plasgos-crm-sdk-node/${SDK_VERSION} node/${process.versions.node}`,
       fetchImpl: options.fetch ?? globalThis.fetch,
+      logger: options.logger,
       sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
       clock: options.clock ?? (() => Math.floor(Date.now() / 1000)),
     });

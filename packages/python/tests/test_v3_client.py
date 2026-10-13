@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Union
@@ -276,6 +277,30 @@ def test_next_pages_keep_the_options() -> None:
     assert items == [{"id": 1}, {"id": 2}]
     assert [r.headers.get("X-Trace") for r in h.requests] == ["t2", "t2"]
     assert str(h.requests[1].url).endswith("/api/v3/contacts?per_page=1&page=2")
+
+
+# ——— logging (SDK_SPEC §1.2) ———
+
+
+def test_debug_log_per_attempt_without_secrets(caplog: pytest.LogCaptureFixture) -> None:
+    h = Harness([fail(503, "service_unavailable", "service_unavailable"), ok({"id": "c1"})])
+    with caplog.at_level(logging.DEBUG, logger="plasgos_crm"):
+        h.client.contacts.list(search="0812345")
+    events = [r.plasgos_crm for r in caplog.records]  # type: ignore[attr-defined]
+    assert [(e["attempt"], e["status"], e["error_code"]) for e in events] == [(1, 503, "service_unavailable"), (2, 200, None)]
+    assert events[0]["path"] == "/api/v3/contacts" and events[0]["retry_in_ms"] is not None
+    assert events[1]["retry_in_ms"] is None
+    text = caplog.text + repr(events)
+    for secret in ("ak_test", "sk_test", "0812345", "v1="):
+        assert secret not in text
+
+
+def test_transport_error_logged_without_status(caplog: pytest.LogCaptureFixture) -> None:
+    h = Harness([connect_error()], max_retries=0)
+    with caplog.at_level(logging.DEBUG, logger="plasgos_crm"), pytest.raises(TransportError):
+        h.client.me.get()
+    assert caplog.records[0].plasgos_crm["status"] is None  # type: ignore[attr-defined]
+    assert caplog.records[0].plasgos_crm["error_code"] == "transport_error"  # type: ignore[attr-defined]
 
 
 # ——— errors (SDK_SPEC §5) ———

@@ -32,6 +32,7 @@ use Plasgos\CrmSdk\Signature;
 use Plasgos\CrmSdk\Tests\Support\RecordingClient;
 use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
+use Psr\Log\AbstractLogger;
 
 final class ClientTest extends TestCase
 {
@@ -284,6 +285,38 @@ final class ClientTest extends TestCase
     {
         $this->expectException(\LogicException::class);
         $this->client(new RecordingClient([]))->me->get(new RequestOptions(timeout: 1));
+    }
+
+    public function testLoggerGetsOneDebugRecordPerAttemptWithoutSecrets(): void
+    {
+        $logger = new class () extends AbstractLogger {
+            /** @var list<array{string, string, array<string, mixed>}> */
+            public array $records = [];
+
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                $this->records[] = [(string) $level, (string) $message, $context];
+            }
+        };
+        $http = new RecordingClient([self::error(503, 'service_unavailable', 'service_unavailable'), self::ok(200, [])]);
+        $client = new Client('ak_live_123', 'sk_live_abc', new ClientConfig(
+            httpClient: $http,
+            logger: $logger,
+            sleeper: static function (float $s): void {},
+            clock: static fn (): int => self::NOW,
+        ));
+        $client->contacts->list(['search' => '0812345']);
+
+        self::assertCount(2, $logger->records);
+        [$level, $message, $first] = $logger->records[0];
+        self::assertSame('debug', $level);
+        self::assertSame(['GET', '/api/v3/contacts', 1, 503, 'service_unavailable'], [$first['method'], $first['path'], $first['attempt'], $first['status'], $first['error_code']]);
+        self::assertIsInt($first['retry_in_ms']);
+        self::assertSame([2, 200, 'req_ok', null], [$logger->records[1][2]['attempt'], $logger->records[1][2]['status'], $logger->records[1][2]['request_id'], $logger->records[1][2]['retry_in_ms']]);
+        $text = json_encode($logger->records, JSON_THROW_ON_ERROR);
+        foreach (['ak_live_123', 'sk_live_abc', '0812345', 'v1='] as $secret) {
+            self::assertStringNotContainsString($secret, $text);
+        }
     }
 
     /** @return iterable<string, array{int, string, string, class-string<PlasgosApiException>}> */

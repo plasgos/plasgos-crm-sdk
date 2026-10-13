@@ -89,6 +89,7 @@ Inputs and outputs use the API wire format (snake_case), described by
 | `maxRetryWait` | `30` s | Longest `Retry-After` honoured automatically. |
 | `userAgent` | `plasgos-crm-sdk-node/<version> node/<version>` | Integrations append themselves. |
 | `fetch` | global `fetch` | Injectable transport. |
+| `logger` | none | `(event) => void`, one event per attempt; never headers or bodies (SDK_SPEC §1.2). |
 | `sleep`, `clock` | real | Test hooks. |
 
 Every method also takes per-call options as its last argument (docs/SDK_SPEC.md §1.1):

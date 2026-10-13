@@ -96,6 +96,9 @@ endpoints that do not have a method yet. The full surface is in
 | `transport` / `http_client` | — | Inject an `httpx` transport (e.g. `httpx.MockTransport`) or your own `httpx.Client`. |
 | `sleeper`, `clock` | real | Test hooks. |
 
+Logging: enable DEBUG on the `plasgos_crm` logger for one record per attempt (method, path without
+the query, status, duration, request id); headers and bodies are never logged.
+
 Every method also takes keyword-only per-call options (docs/SDK_SPEC.md §1.1):
 
 ```python

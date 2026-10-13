@@ -8,6 +8,7 @@
 | `Retry-After` terlama yang ditunggu | `maxRetryWait` (detik) | `maxRetryWait` | `max_retry_wait` | 30 detik |
 | User-Agent | `userAgent` | `userAgent` | `user_agent` | `plasgos-crm-sdk-<bahasa>/<versi> …` |
 | Transport | `fetch` | `httpClient` + `requestFactory` + `streamFactory` (PSR-18/17) | `transport` / `http_client` (httpx) | bawaan platform |
+| Log per percobaan | `logger` (fungsi) | `logger` (PSR-3) | logger `plasgos_crm` (stdlib) | tidak ada |
 | Hook uji | `sleep`, `clock` | `sleeper`, `clock` | `sleeper`, `clock` | nyata |
 
 `ClientConfig` PHP juga dipakai `LegacyClient` (v1), sehingga punya `signatureTtl`. Opsi ini hanya
@@ -86,6 +87,29 @@ client.contacts.get(contact_id, options={"headers": {"X-Trace-Id": trace_id}})
   itu; SDK melempar `LogicException` daripada diam-diam mengabaikannya.
 - Node: `signal` juga menghentikan percobaan ulang yang sedang menunggu; alasan pembatalan dilempar
   apa adanya (bukan `TransportError`).
+
+## Log permintaan
+
+SDK mencatat satu kejadian per percobaan: metode, path (tanpa query), status, durasi, `request_id`,
+`error_code`, dan jeda sebelum coba ulang. Header, query, dan body **tidak pernah** dicatat, jadi
+kunci API, tanda tangan, nomor telepon, email, dan isi pesan tidak bocor ke log.
+
+```ts
+new Client(key, secret, { logger: (e) => console.debug("plasgos", e) });                // Node
+```
+
+```php
+new Client($key, $secret, new ClientConfig(logger: $psr3Logger));                        // PHP (PSR-3, level debug)
+```
+
+```python
+import logging
+logging.getLogger("plasgos_crm").setLevel(logging.DEBUG)                                 # Python
+# rincian terstruktur ada di record.plasgos_crm
+```
+
+Contoh baris: `GET /api/v3/contacts attempt 1 -> 503 in 212 ms, retrying in 380 ms`. Logger yang
+melempar galat diabaikan; panggilan tetap berjalan.
 
 ## Endpoint tanpa metode
 

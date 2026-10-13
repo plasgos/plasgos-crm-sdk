@@ -35,6 +35,26 @@ export type KeyOrOptions = string | RequestOptions | null | undefined;
 /** Headers the SDK owns: overriding them would break signing or idempotency. */
 const RESERVED_HEADERS = new Set(["accept", "user-agent", "plasgos-api-key", "plasgos-timestamp", "plasgos-signature", "idempotency-key", "content-type", "content-length", "host"]);
 
+/**
+ * One attempt of a call, for logging (docs/SDK_SPEC.md §1.2). Never carries headers, the query or the
+ * body, so keys, signatures, phone numbers and message text cannot leak into logs.
+ */
+export interface RequestLogEvent {
+  method: Method;
+  /** Path without the query, e.g. `/api/v3/contacts/c_1`. */
+  path: string;
+  /** 1 for the first try. */
+  attempt: number;
+  /** HTTP status; null when no response arrived (transport error). */
+  status: number | null;
+  durationMs: number;
+  requestId: string | null;
+  /** `errorCode` of the error; null on success. */
+  errorCode: string | null;
+  /** Wait before the next retry; null when this attempt is final. */
+  retryInMs: number | null;
+}
+
 export interface ApiClientConfig {
   baseUrl: string;
   apiKey: string;
@@ -45,6 +65,8 @@ export interface ApiClientConfig {
   /** Longest `Retry-After` (seconds) honoured automatically. */
   maxRetryWait: number;
   fetchImpl: typeof fetch;
+  /** Receives one event per attempt; errors it throws are ignored. */
+  logger?: (event: RequestLogEvent) => void;
   /** Test hook: wait `ms` milliseconds. */
   sleep: (ms: number) => Promise<void>;
   /** Test hook: current Unix time in seconds (signing timestamp). */
@@ -75,12 +97,28 @@ export class ApiClient {
     const key = options.idempotencyKey ?? (verb === "POST" ? randomUUID() : null);
     const maxRetries = options.maxRetries ?? this.config.maxRetries;
 
+    const logPath = requestTarget.split("?")[0]!;
+
     for (let attempt = 0; ; attempt++) {
       options.signal?.throwIfAborted();
+      const started = Date.now();
       try {
-        return await this.attempt<T, M>(verb, url, requestTarget, rawBody, key, options);
+        const response = await this.attempt<T, M>(verb, url, requestTarget, rawBody, key, options);
+        this.log({ method: verb, path: logPath, attempt: attempt + 1, status: response.httpStatus, durationMs: Date.now() - started, requestId: response.requestId, errorCode: null, retryInMs: null });
+        return response;
       } catch (error) {
-        const wait = error instanceof PlasgosApiError ? this.retryWait(error, verb, attempt, maxRetries) : null;
+        if (!(error instanceof PlasgosApiError)) throw error;
+        const wait = this.retryWait(error, verb, attempt, maxRetries);
+        this.log({
+          method: verb,
+          path: logPath,
+          attempt: attempt + 1,
+          status: error.httpStatus || null,
+          durationMs: Date.now() - started,
+          requestId: error.requestId ?? null,
+          errorCode: error.errorCode ?? null,
+          retryInMs: wait,
+        });
         if (wait === null) throw error;
         await this.config.sleep(wait);
       }
@@ -123,6 +161,14 @@ export class ApiClient {
       options.signal?.removeEventListener("abort", cancel);
     }
     return parse<T, M>(response.status, lowerHeaders(response.headers), await response.text());
+  }
+
+  private log(event: RequestLogEvent): void {
+    try {
+      this.config.logger?.(event);
+    } catch {
+      // A broken logger must not break the call.
+    }
   }
 
   /** Milliseconds to wait before retrying, or null when this error is not retried (§6). */
