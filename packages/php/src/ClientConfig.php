@@ -21,6 +21,7 @@ final class ClientConfig
         public readonly BaseUrl|string|null $baseUrl = null,
         public readonly float $timeout = 15.0,
         public readonly int $maxRetries = 2,
+        /** {@see LegacyClient} (v1) only — informational server TTL in seconds; the v3 {@see Client} ignores it. */
         public readonly int $signatureTtl = 300,
         public readonly ?string $userAgent = null,
         public readonly ?ClientInterface $httpClient = null,

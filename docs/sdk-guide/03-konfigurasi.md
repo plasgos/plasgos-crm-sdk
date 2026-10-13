@@ -10,6 +10,9 @@
 | Transport | `fetch` | `httpClient` + `requestFactory` + `streamFactory` (PSR-18/17) | `transport` / `http_client` (httpx) | bawaan platform |
 | Hook uji | `sleep`, `clock` | `sleeper`, `clock` | `sleeper`, `clock` | nyata |
 
+`ClientConfig` PHP juga dipakai `LegacyClient` (v1), sehingga punya `signatureTtl`. Opsi ini hanya
+berlaku untuk v1 dan diabaikan `Client` v3: masa berlaku tanda tangan v3 (5 menit) ditegakkan server.
+
 ## Base URL
 
 | Nilai | URL |
