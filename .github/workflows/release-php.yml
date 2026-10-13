@@ -1,0 +1,92 @@
+name: release-php
+
+# Releases packages/php when a tag like `php-v1.2.3` is pushed.
+#
+# Packagist needs composer.json at the repository root, so this monorepo cannot be registered
+# directly: the job splits packages/php (full history) into a read-only mirror repository and tags
+# it `v1.2.3`; Packagist watches the mirror.
+#
+# Requirements (once):
+#   - Mirror repository, e.g. github.com/plasgos/crm-sdk-php (empty, read-only for people).
+#   - Repo variable PHP_MIRROR_REPO = "plasgos/crm-sdk-php".
+#   - Repo secret PHP_MIRROR_DEPLOY_KEY = private SSH key whose public half is a deploy key with
+#     write access on the mirror.
+#   - Register the mirror at https://packagist.org as `plasgos/crm-sdk` and enable its GitHub hook.
+#     Optional: secrets PACKAGIST_USERNAME + PACKAGIST_TOKEN to trigger the update right away.
+on:
+  push:
+    tags: ["php-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ["8.1", "8.4"]
+    defaults:
+      run:
+        working-directory: packages/php
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: json, hash
+          coverage: none
+      - run: composer validate --strict
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer test
+      - run: composer analyse
+      - name: Tipe sinkron dengan openapi-v3.json
+        run: node ../../scripts/generate-types.mjs --check
+      - name: Tag sama dengan Transport::VERSION
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#php-v}"
+          SDK_VERSION="$(php -r 'require "vendor/autoload.php"; echo \Plasgos\CrmSdk\Http\Transport::VERSION;')"
+          if [ "$TAG_VERSION" != "$SDK_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME -> $TAG_VERSION does not match Transport::VERSION $SDK_VERSION" >&2
+            exit 1
+          fi
+
+  mirror:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # subtree split needs the full history
+
+      - name: Split packages/php
+        id: split
+        run: echo "sha=$(git subtree split --prefix=packages/php HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Push split + tag to the mirror
+        env:
+          DEPLOY_KEY: ${{ secrets.PHP_MIRROR_DEPLOY_KEY }}
+          MIRROR: ${{ vars.PHP_MIRROR_REPO }}
+          SHA: ${{ steps.split.outputs.sha }}
+        run: |
+          test -n "$DEPLOY_KEY" && test -n "$MIRROR" || { echo "PHP_MIRROR_DEPLOY_KEY / PHP_MIRROR_REPO not configured" >&2; exit 1; }
+          VERSION="v${GITHUB_REF_NAME#php-v}"
+          install -m 600 /dev/null ~/.ssh_mirror_key && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh_mirror_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh_mirror_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git tag "$VERSION" "$SHA"
+          git push "git@github.com:${MIRROR}.git" "${SHA}:refs/heads/main" "refs/tags/${VERSION}"
+          rm -f ~/.ssh_mirror_key
+
+      - name: Ask Packagist to update now (optional)
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+          MIRROR: ${{ vars.PHP_MIRROR_REPO }}
+        run: |
+          if [ -z "$PACKAGIST_USERNAME" ] || [ -z "$PACKAGIST_TOKEN" ]; then
+            echo "Packagist secrets not set; the GitHub hook on the mirror will update it."
+            exit 0
+          fi
+          curl -sSf -X POST -H 'Content-Type: application/json' \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
+            -d "{\"repository\":{\"url\":\"https://github.com/${MIRROR}\"}}"

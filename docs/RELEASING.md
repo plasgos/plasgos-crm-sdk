@@ -40,41 +40,65 @@ git tag node-v1.2.0 && git push && git push origin node-v1.2.0
 CI: [`.github/workflows/release-node.yml`](../.github/workflows/release-node.yml)
 fires on `node-v*` tags — typecheck + test + build, verifies the tag matches
 `package.json`, then `npm publish --provenance --access public` (needs the
-`NPM_TOKEN` repo secret, or npm Trusted Publishing).
+`NPM_TOKEN` repo secret, or npm Trusted Publishing). It also checks the tag against `SDK_VERSION`
+and the generated types against `openapi-v3.json`.
 
 ## PHP → Packagist
 
-Packagist builds from the tag; there is no upload step.
+Packagist needs `composer.json` at the repository root, so the monorepo is not registered directly.
+CI ([`.github/workflows/release-php.yml`](../.github/workflows/release-php.yml)) fires on `php-v*`
+tags:
 
-1. Register the repo once at https://packagist.org (`plasgos/crm-sdk`), enable
-   the GitHub service hook.
-2. `git tag php-v1.2.0 && git push origin php-v1.2.0`.
-3. Packagist picks it up; the version string comes from the tag
-   (strip the `php-` prefix in the Packagist package settings, or publish from a
-   `packages/php` subtree split — see below).
+1. **verify** (PHP 8.1 and 8.4): `composer validate --strict`, tests, PHPStan (`composer analyse`),
+   types in sync with `openapi-v3.json`, and the tag equals `Transport::VERSION`.
+2. **mirror**: `git subtree split --prefix=packages/php` (full history) is pushed to the read-only
+   mirror's `main` and tagged `v1.2.0` there; Packagist publishes `1.2.0` from that tag.
+   `.gitattributes` keeps tests and dev files out of the dist archive.
 
-Because this is a monorepo, Packagist must point at `packages/php`. Either:
-- use a **subtree split** to a dedicated read-only repo
-  (`plasgos/crm-sdk-php`) that Packagist watches, updated by CI on each
-  `php-v*` tag, or
-- configure the Packagist package with the monorepo URL and a
-  `"path"`-aware setup (subtree split is the reliable option).
+One-time setup:
+
+| What | Where |
+|---|---|
+| Empty mirror repository, e.g. `plasgos/crm-sdk-php` | GitHub |
+| Deploy key with **write** access on the mirror; private half in secret `PHP_MIRROR_DEPLOY_KEY` | mirror → Settings → Deploy keys; this repo → Secrets |
+| Variable `PHP_MIRROR_REPO` = `plasgos/crm-sdk-php` | this repo → Variables |
+| Register the mirror as `plasgos/crm-sdk` and enable the GitHub hook | https://packagist.org |
+| Optional: `PACKAGIST_USERNAME` + `PACKAGIST_TOKEN` to trigger the update immediately | this repo → Secrets |
+
+```bash
+# bump packages/php/src/Http/Transport.php VERSION + CHANGELOG, commit, then:
+git tag php-v1.2.0 && git push origin php-v1.2.0
+```
+
+Never commit to the mirror by hand: every release rewrites its `main` from the split.
 
 ## Python → PyPI
 
+CI ([`.github/workflows/release-python.yml`](../.github/workflows/release-python.yml)) fires on
+`python-v*` tags:
+
+1. **build**: tests, ruff, mypy, types in sync, tag equals both `pyproject.toml` and
+   `plasgos_crm.__version__`, `python -m build`, `twine check --strict`, and a smoke install of the
+   wheel in a fresh venv.
+2. **publish** (environment `pypi`): uploads the built files with Trusted Publishing (OIDC), so no
+   PyPI token is stored in GitHub.
+
+One-time setup: on PyPI, add a trusted publisher for `plasgos-crm-sdk` (owner `plasgos`, repository
+`plasgos-crm-sdk`, workflow `release-python.yml`, environment `pypi`); in GitHub, create the
+environment `pypi` (add required reviewers to gate releases). For the very first release, use a
+"pending publisher" on PyPI.
+
 ```bash
-cd packages/python
-python -m build
-python -m twine upload dist/*        # needs PYPI_API_TOKEN
+# bump pyproject.toml version + src/plasgos_crm/_version.py + CHANGELOG, commit, then:
+git tag python-v1.2.0 && git push origin python-v1.2.0
 ```
 
-CI equivalent: trigger on `python-v*` tags, `python -m build`, then
-`pypa/gh-action-pypi-publish` with trusted publishing (OIDC) — no token needed.
+Local dry run: `cd packages/python && python -m build && twine check --strict dist/*`.
 
 ## Pre-release checklist
 
-- [ ] `openapi/openapi.yaml` and `docs/SDK_SPEC.md` reflect the change.
+- [ ] `openapi/openapi-v3.json` (copied from api-crm) and `docs/SDK_SPEC.md` reflect the change; `node scripts/generate-types.mjs` run.
 - [ ] All three test suites green in CI.
-- [ ] `docs/vectors.json` unchanged (or intentionally rotated + all suites updated).
+- [ ] `docs/vectors.json` / `docs/vectors-v3.json` unchanged (or intentionally rotated + all suites updated).
 - [ ] READMEs updated for any new method.
 - [ ] CHANGELOG entry per package.

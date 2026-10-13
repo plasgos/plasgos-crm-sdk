@@ -35,12 +35,16 @@ jobs:
       - name: Verify CommonJS + ESM consumption
         run: node scripts/smoke-consume.mjs
 
-      - name: Verify tag matches package.json version
+      - name: Tipe sinkron dengan openapi-v3.json
+        run: node ../../scripts/generate-types.mjs --check
+
+      - name: Verify tag matches package.json and SDK_VERSION
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#node-v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "Tag $GITHUB_REF_NAME -> $TAG_VERSION does not match package.json $PKG_VERSION" >&2
+          SDK_VERSION="$(node -p "require('./dist/index.cjs').SDK_VERSION")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ] || [ "$TAG_VERSION" != "$SDK_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME -> $TAG_VERSION, package.json $PKG_VERSION, SDK_VERSION $SDK_VERSION" >&2
             exit 1
           fi
 
