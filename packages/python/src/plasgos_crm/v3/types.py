@@ -591,7 +591,7 @@ class WebhookEvent(TypedDict):
     type: WebhookEventType
     api_version: Literal["v3"]
     created_at: str
-    #: Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment).
+    #: Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment, DealEvent, WebchatVisitorIdentified).
     data: Dict[str, Any]
 
 
@@ -646,6 +646,28 @@ class ContactRef(TypedDict, total=False):
     lifecycle_stage: Optional[str]
     locale: Optional[str]
     timezone: Optional[str]
+
+
+class _WebchatVisitorIdentifiedRequired(TypedDict):
+    #: Id pengunjung (`vis_…`) — juga `external_id` identitas webchat kontak.
+    visitor_id: str
+    channel: Literal["webchat"]
+    #: Id widget (`wgt_…`).
+    endpoint_id: str
+    trust_level: Literal["contact_provided", "verified"]
+    method: Literal["prechat", "identity_token", "otp_email"]
+    identified_at: str
+
+
+class WebchatVisitorIdentified(_WebchatVisitorIdentifiedRequired, total=False):
+    """Data event `webchat.visitor.identified`: pengunjung widget website naik tingkat kepercayaan — mengisi formulir perkenalan (`contact_provided`) atau terbukti lewat login website / kode email (`verified`). Tanpa email/nama: ambil lewat `GET /contacts/{contact_id}`."""
+
+    #: Kontak pengunjung; null bila pengunjung belum pernah menulis/mengisi formulir.
+    contact_id: Optional[str]
+    #: `sub` identity token (pengguna website) bila `method: identity_token`.
+    external_user_id: Optional[str]
+    #: Domain email pengunjung (mis. `perusahaan.co.id`) untuk segmentasi B2B; alamat lengkap tak dikirim.
+    email_domain: Optional[str]
 
 
 class GetMeMeta(Meta):
@@ -1013,16 +1035,16 @@ class RotateWebhookSecretMeta(Meta):
 
 
 Scope = Literal["account:read", "channels:read", "messages:read", "messages:write", "contacts:read", "contacts:write", "leads:read", "leads:write", "broadcasts:read", "broadcasts:write", "followups:read", "followups:write", "webhooks:manage"]
-ChannelName = Literal["whatsapp", "instagram", "messenger"]
+ChannelName = Literal["whatsapp", "instagram", "messenger", "webchat"]
 Transport = Literal["official", "unofficial"]
 ContentType = Literal["text", "image", "video", "audio", "document", "template"]
 MessageStatus = Literal["pending", "sent", "delivered", "read", "failed"]
 Content = Union[ContentText, ContentMedia, ContentTemplate]
 BroadcastStatus = Literal["scheduled", "processing", "paused", "completed", "cancelled", "failed"]
 EnrollmentStatus = Literal["active", "completed", "stopped"]
-WebhookEventType = Literal["message.received", "message.status_updated", "contact.created", "contact.updated", "lead.created", "lead.stage_changed", "deal.won", "deal.lost", "broadcast.completed", "followup.enrollment.completed", "followup.enrollment.stopped", "webhook.test"]
+WebhookEventType = Literal["message.received", "message.status_updated", "contact.created", "contact.updated", "lead.created", "lead.stage_changed", "deal.won", "deal.lost", "broadcast.completed", "followup.enrollment.completed", "followup.enrollment.stopped", "webchat.visitor.identified", "webhook.test"]
 BroadcastRecipientStatus = Literal["pending", "sent", "delivered", "read", "failed", "cancelled"]
-WebhookSubscribableEvent = Literal["message.received", "message.status_updated", "contact.created", "contact.updated", "lead.created", "lead.stage_changed", "deal.won", "deal.lost", "broadcast.completed", "followup.enrollment.completed", "followup.enrollment.stopped"]
+WebhookSubscribableEvent = Literal["message.received", "message.status_updated", "contact.created", "contact.updated", "lead.created", "lead.stage_changed", "deal.won", "deal.lost", "broadcast.completed", "followup.enrollment.completed", "followup.enrollment.stopped", "webchat.visitor.identified"]
 GetMeData = Me
 ListChannelsData = List[Channel]
 ListEndpointsData = List[Endpoint]

@@ -22,6 +22,7 @@ export const WebhookEventType = Object.freeze({
   BROADCAST_COMPLETED: "broadcast.completed",
   FOLLOWUP_ENROLLMENT_COMPLETED: "followup.enrollment.completed",
   FOLLOWUP_ENROLLMENT_STOPPED: "followup.enrollment.stopped",
+  WEBCHAT_VISITOR_IDENTIFIED: "webchat.visitor.identified",
   WEBHOOK_TEST: "webhook.test",
 } as const);
 

@@ -18,5 +18,6 @@ final class EventType
     public const BROADCAST_COMPLETED = 'broadcast.completed';
     public const FOLLOWUP_ENROLLMENT_COMPLETED = 'followup.enrollment.completed';
     public const FOLLOWUP_ENROLLMENT_STOPPED = 'followup.enrollment.stopped';
+    public const WEBCHAT_VISITOR_IDENTIFIED = 'webchat.visitor.identified';
     public const WEBHOOK_TEST = 'webhook.test';
 }

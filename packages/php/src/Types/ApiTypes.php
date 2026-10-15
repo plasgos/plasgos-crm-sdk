@@ -56,7 +56,7 @@ namespace Plasgos\CrmSdk\Types;
  *   },
  * }
  * @phpstan-type Scope 'account:read'|'channels:read'|'messages:read'|'messages:write'|'contacts:read'|'contacts:write'|'leads:read'|'leads:write'|'broadcasts:read'|'broadcasts:write'|'followups:read'|'followups:write'|'webhooks:manage'
- * @phpstan-type ChannelName 'whatsapp'|'instagram'|'messenger'
+ * @phpstan-type ChannelName 'whatsapp'|'instagram'|'messenger'|'webchat'
  * @phpstan-type Transport 'official'|'unofficial'
  * @phpstan-type Channel array{
  *   name: ChannelName,
@@ -362,7 +362,7 @@ namespace Plasgos\CrmSdk\Types;
  *   stop_reason: string|null,
  *   client_reference: string|null,
  * }
- * @phpstan-type WebhookEventType 'message.received'|'message.status_updated'|'contact.created'|'contact.updated'|'lead.created'|'lead.stage_changed'|'deal.won'|'deal.lost'|'broadcast.completed'|'followup.enrollment.completed'|'followup.enrollment.stopped'|'webhook.test'
+ * @phpstan-type WebhookEventType 'message.received'|'message.status_updated'|'contact.created'|'contact.updated'|'lead.created'|'lead.stage_changed'|'deal.won'|'deal.lost'|'broadcast.completed'|'followup.enrollment.completed'|'followup.enrollment.stopped'|'webchat.visitor.identified'|'webhook.test'
  * @phpstan-type WebhookInput array{
  *   url: string,
  *   events: list<WebhookSubscribableEvent>,
@@ -403,7 +403,7 @@ namespace Plasgos\CrmSdk\Types;
  *   code: string,
  *   message: string,
  * }
- * @phpstan-type WebhookSubscribableEvent 'message.received'|'message.status_updated'|'contact.created'|'contact.updated'|'lead.created'|'lead.stage_changed'|'deal.won'|'deal.lost'|'broadcast.completed'|'followup.enrollment.completed'|'followup.enrollment.stopped'
+ * @phpstan-type WebhookSubscribableEvent 'message.received'|'message.status_updated'|'contact.created'|'contact.updated'|'lead.created'|'lead.stage_changed'|'deal.won'|'deal.lost'|'broadcast.completed'|'followup.enrollment.completed'|'followup.enrollment.stopped'|'webchat.visitor.identified'
  * @phpstan-type DealEvent array{
  *   id?: string,
  *   title?: string|null,
@@ -430,6 +430,17 @@ namespace Plasgos\CrmSdk\Types;
  *   lifecycle_stage?: string|null,
  *   locale?: string|null,
  *   timezone?: string|null,
+ * }
+ * @phpstan-type WebchatVisitorIdentified array{
+ *   visitor_id: string,
+ *   channel: 'webchat',
+ *   endpoint_id: string,
+ *   contact_id?: string|null,
+ *   trust_level: 'contact_provided'|'verified',
+ *   method: 'prechat'|'identity_token'|'otp_email',
+ *   external_user_id?: string|null,
+ *   email_domain?: string|null,
+ *   identified_at: string,
  * }
  * @phpstan-type GetMeQuery array<string, never>
  * @phpstan-type GetMeData Me

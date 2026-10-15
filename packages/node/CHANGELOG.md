@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [2.0.0] - Unreleased
 
+### API contract additions (webchat)
+- Channel `webchat` (website chat widget) in `ChannelName`: contact references `{channel: "webchat", external_id: "vis_…"}` (visitor id, or `uid:<widget_id>:<sub>` for visitors signed in on the website) — scoped to the widget, so pass `endpoint_id` (`wgt_…`) when sending. Treat channel values you don't know as "other", never fail on them.
+- Webhook event `webchat.visitor.identified` (`WebhookEventType.WEBCHAT_VISITOR_IDENTIFIED`): a website visitor filled the pre-chat form (`trust_level: contact_provided`) or proved who they are via website sign-in / email code (`verified`). Data `WebchatVisitorIdentified` carries ids, trust level, method and the email **domain** only — fetch the contact for personal data.
+
 ### API contract 3.0.0-rc.2
 - One `contact` object names "who" in `messages.send`, `leads.create` and `followups.enroll`: `{id}` | `{phone_number, …profile}` | `{channel, external_id}` | `{email}` (replaces `recipient` + `identity` + `create_contact`, and `contact_id` | `contact`). Profile fields only fill a NEW contact. `send-options` / `lookup` queries use the same keys (`send-options` also accepts `email`).
 - `meta.created` everywhere (contact upsert: replaces `meta.operation`; message send: `true`).

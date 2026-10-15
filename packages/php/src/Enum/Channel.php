@@ -10,4 +10,6 @@ enum Channel: string
     case WhatsApp = 'whatsapp';
     case Instagram = 'instagram';
     case Messenger = 'messenger';
+    /** Widget chat di website tenant (identitas berskop widget — sebut `endpoint_id`). */
+    case Webchat = 'webchat';
 }

@@ -3442,7 +3442,7 @@
     "event": {
       "post": {
         "summary": "Event yang dikirim Plasgos CRM ke URL langganan",
-        "description": "Header: `Plasgos-Webhook-Id`, `Plasgos-Webhook-Timestamp`, `Plasgos-Webhook-Signature`\n(`v1=` + hex(HMAC-SHA256(signing_secret, id + \".\" + timestamp + \".\" + raw_body)); dua nilai dipisah koma selama 24 jam setelah rotasi secret).\nBalas 2xx dalam 10 detik; redirect tidak diikuti. Gagal → dicoba lagi 8× (1 mnt, 5 mnt, 30 mnt, 1, 2, 4, 8, 8 jam) dengan `id` & isi yang sama — abaikan `id` yang sudah diproses.\nLangganan yang gagal terus selama 3 hari dinonaktifkan (`disabled_reason: too_many_failures`); aktifkan lagi lewat `PATCH /webhooks/{id}` `{\"enabled\": true}`.\n`data` dibangun saat percobaan pertama, bentuknya sama dengan GET di API: Message (`message.*`), Contact (`contact.*`), Lead (`lead.*`), Broadcast (`broadcast.completed`, hanya broadcast buatan API), Enrollment (`followup.enrollment.*`), DealEvent (`deal.*`). Status pesan \"dibaca sampai\" (Instagram/Messenger) tanpa id pesan tidak dikirim.\n",
+        "description": "Header: `Plasgos-Webhook-Id`, `Plasgos-Webhook-Timestamp`, `Plasgos-Webhook-Signature`\n(`v1=` + hex(HMAC-SHA256(signing_secret, id + \".\" + timestamp + \".\" + raw_body)); dua nilai dipisah koma selama 24 jam setelah rotasi secret).\nBalas 2xx dalam 10 detik; redirect tidak diikuti. Gagal → dicoba lagi 8× (1 mnt, 5 mnt, 30 mnt, 1, 2, 4, 8, 8 jam) dengan `id` & isi yang sama — abaikan `id` yang sudah diproses.\nLangganan yang gagal terus selama 3 hari dinonaktifkan (`disabled_reason: too_many_failures`); aktifkan lagi lewat `PATCH /webhooks/{id}` `{\"enabled\": true}`.\n`data` dibangun saat percobaan pertama, bentuknya sama dengan GET di API: Message (`message.*`), Contact (`contact.*`), Lead (`lead.*`), Broadcast (`broadcast.completed`, hanya broadcast buatan API), Enrollment (`followup.enrollment.*`), DealEvent (`deal.*`), WebchatVisitorIdentified (`webchat.visitor.identified`). Status pesan \"dibaca sampai\" (Instagram/Messenger) tanpa id pesan tidak dikirim.\n",
         "parameters": [
           {
             "name": "Plasgos-Webhook-Id",
@@ -4173,11 +4173,12 @@
       },
       "ChannelName": {
         "type": "string",
-        "description": "Daftar terbuka; channel baru bisa bertambah.",
+        "description": "Daftar terbuka; channel baru bisa bertambah — perlakukan nilai yang belum dikenal sebagai channel lain, jangan gagal. `webchat` = widget chat di website tenant (identitas `external_id`: id pengunjung `vis_…` atau `uid:<widget_id>:<sub>` bila pengunjung login di website; berskop widget → sebut `endpoint_id`).",
         "enum": [
           "whatsapp",
           "instagram",
-          "messenger"
+          "messenger",
+          "webchat"
         ]
       },
       "Transport": {
@@ -5994,6 +5995,7 @@
           "broadcast.completed",
           "followup.enrollment.completed",
           "followup.enrollment.stopped",
+          "webchat.visitor.identified",
           "webhook.test"
         ]
       },
@@ -6123,7 +6125,7 @@
             "format": "date-time"
           },
           "data": {
-            "description": "Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment).",
+            "description": "Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment, DealEvent, WebchatVisitorIdentified).",
             "type": "object"
           }
         }
@@ -6226,7 +6228,8 @@
           "deal.lost",
           "broadcast.completed",
           "followup.enrollment.completed",
-          "followup.enrollment.stopped"
+          "followup.enrollment.stopped",
+          "webchat.visitor.identified"
         ]
       },
       "DealEvent": {
@@ -6385,6 +6388,72 @@
             "email": "budi@contoh.id"
           }
         ]
+      },
+      "WebchatVisitorIdentified": {
+        "type": "object",
+        "description": "Data event `webchat.visitor.identified`: pengunjung widget website naik tingkat kepercayaan — mengisi formulir perkenalan (`contact_provided`) atau terbukti lewat login website / kode email (`verified`). Tanpa email/nama: ambil lewat `GET /contacts/{contact_id}`.",
+        "required": [
+          "visitor_id",
+          "channel",
+          "endpoint_id",
+          "trust_level",
+          "method",
+          "identified_at"
+        ],
+        "properties": {
+          "visitor_id": {
+            "type": "string",
+            "description": "Id pengunjung (`vis_…`) — juga `external_id` identitas webchat kontak."
+          },
+          "channel": {
+            "type": "string",
+            "const": "webchat"
+          },
+          "endpoint_id": {
+            "type": "string",
+            "description": "Id widget (`wgt_…`)."
+          },
+          "contact_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Kontak pengunjung; null bila pengunjung belum pernah menulis/mengisi formulir."
+          },
+          "trust_level": {
+            "type": "string",
+            "enum": [
+              "contact_provided",
+              "verified"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "prechat",
+              "identity_token",
+              "otp_email"
+            ]
+          },
+          "external_user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`sub` identity token (pengguna website) bila `method: identity_token`."
+          },
+          "email_domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Domain email pengunjung (mis. `perusahaan.co.id`) untuk segmentasi B2B; alamat lengkap tak dikirim."
+          },
+          "identified_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     },
     "x-error-codes": {

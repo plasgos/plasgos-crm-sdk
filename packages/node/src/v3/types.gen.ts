@@ -55,8 +55,8 @@ export type Me = {
 
 export type Scope = "account:read" | "channels:read" | "messages:read" | "messages:write" | "contacts:read" | "contacts:write" | "leads:read" | "leads:write" | "broadcasts:read" | "broadcasts:write" | "followups:read" | "followups:write" | "webhooks:manage";
 
-/** Daftar terbuka; channel baru bisa bertambah. */
-export type ChannelName = "whatsapp" | "instagram" | "messenger";
+/** Daftar terbuka; channel baru bisa bertambah — perlakukan nilai yang belum dikenal sebagai channel lain, jangan gagal. `webchat` = widget chat di website tenant (identitas `external_id`: id pengunjung `vis_…` atau `uid:<widget_id>:<sub>` bila pengunjung login di website; berskop widget → sebut `endpoint_id`). */
+export type ChannelName = "whatsapp" | "instagram" | "messenger" | "webchat";
 
 /** `official` = WhatsApp Business Platform / Meta Graph; `unofficial` = WhatsApp Web (perangkat tersambung). */
 export type Transport = "official" | "unofficial";
@@ -443,7 +443,7 @@ export type Enrollment = {
   client_reference: string | null;
 };
 
-export type WebhookEventType = "message.received" | "message.status_updated" | "contact.created" | "contact.updated" | "lead.created" | "lead.stage_changed" | "deal.won" | "deal.lost" | "broadcast.completed" | "followup.enrollment.completed" | "followup.enrollment.stopped" | "webhook.test";
+export type WebhookEventType = "message.received" | "message.status_updated" | "contact.created" | "contact.updated" | "lead.created" | "lead.stage_changed" | "deal.won" | "deal.lost" | "broadcast.completed" | "followup.enrollment.completed" | "followup.enrollment.stopped" | "webchat.visitor.identified" | "webhook.test";
 
 export type WebhookInput = {
   /** Wajib https dan alamat publik (IP privat, localhost, `::ffff:`, CGNAT, dan hasil DNS ke alamat privat ditolak). Diperiksa lagi saat kirim. */
@@ -473,7 +473,7 @@ export type WebhookEvent = {
   type: WebhookEventType;
   api_version: "v3";
   created_at: string;
-  /** Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment). */
+  /** Objek sumber daya, bentuknya sama dengan GET di API (Message, Contact, Lead, Broadcast, Enrollment, DealEvent, WebchatVisitorIdentified). */
   data: Record<string, unknown>;
 };
 
@@ -494,7 +494,7 @@ export type RejectedRecipient = {
   message: string;
 };
 
-export type WebhookSubscribableEvent = "message.received" | "message.status_updated" | "contact.created" | "contact.updated" | "lead.created" | "lead.stage_changed" | "deal.won" | "deal.lost" | "broadcast.completed" | "followup.enrollment.completed" | "followup.enrollment.stopped";
+export type WebhookSubscribableEvent = "message.received" | "message.status_updated" | "contact.created" | "contact.updated" | "lead.created" | "lead.stage_changed" | "deal.won" | "deal.lost" | "broadcast.completed" | "followup.enrollment.completed" | "followup.enrollment.stopped" | "webchat.visitor.identified";
 
 /** Data event `deal.won` / `deal.lost` (v3.0 belum punya endpoint deal). */
 export type DealEvent = {
@@ -528,6 +528,24 @@ export type ContactRef = {
   lifecycle_stage?: string | null;
   locale?: string | null;
   timezone?: string | null;
+};
+
+/** Data event `webchat.visitor.identified`: pengunjung widget website naik tingkat kepercayaan — mengisi formulir perkenalan (`contact_provided`) atau terbukti lewat login website / kode email (`verified`). Tanpa email/nama: ambil lewat `GET /contacts/{contact_id}`. */
+export type WebchatVisitorIdentified = {
+  /** Id pengunjung (`vis_…`) — juga `external_id` identitas webchat kontak. */
+  visitor_id: string;
+  channel: "webchat";
+  /** Id widget (`wgt_…`). */
+  endpoint_id: string;
+  /** Kontak pengunjung; null bila pengunjung belum pernah menulis/mengisi formulir. */
+  contact_id?: string | null;
+  trust_level: "contact_provided" | "verified";
+  method: "prechat" | "identity_token" | "otp_email";
+  /** `sub` identity token (pengguna website) bila `method: identity_token`. */
+  external_user_id?: string | null;
+  /** Domain email pengunjung (mis. `perusahaan.co.id`) untuk segmentasi B2B; alamat lengkap tak dikirim. */
+  email_domain?: string | null;
+  identified_at: string;
 };
 
 /** Query, body, `data` dan `meta` respons sukses per operasi (operationId OpenAPI). */
