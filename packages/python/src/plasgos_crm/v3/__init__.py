@@ -6,6 +6,7 @@ from .client import Client
 from .content import Content, TemplateContent
 from .response import ApiResponse, AsyncPage, Page, RateLimit
 from .signature import SIGNATURE_PREFIX, sign_v3, signature_headers_v3, string_to_sign
+from .webchat import Webchat
 from .webhook import Webhook, WebhookEventType
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "Page",
     "RateLimit",
     "RequestOptions",
+    "Webchat",
     "Webhook",
     "WebhookEventType",
     "SIGNATURE_PREFIX",

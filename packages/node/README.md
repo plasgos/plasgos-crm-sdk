@@ -168,3 +168,20 @@ app.post("/webhooks/plasgos", express.text({ type: () => true }), (req, res) => 
 ```
 
 Verify the **raw** body. Deliveries can repeat, so drop `event.id` values you have already processed.
+
+## Webchat identity token
+
+Let the website chat widget recognise a signed-in customer. Sign on your server with the widget's identity
+secret (`wcs_…`) — never in the browser — and pass only the token to the page:
+
+```ts
+import { Webchat } from "plasgos-crm-sdk";
+
+const identityToken = Webchat.signIdentity(process.env.PLASGOS_WEBCHAT_IDENTITY_SECRET!, {
+  sub: String(user.id), email: user.email, name: user.name,
+}); // options: { widgetId, ttl (seconds, default 3600, max 86400) }
+// page: Plasgos("boot", { widgetId: "wgt_…", identityToken })
+```
+
+Tokens are single-use per visitor: sign a fresh one per page render / sign-in.
+

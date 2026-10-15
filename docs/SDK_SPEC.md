@@ -334,9 +334,48 @@ Also expose:
 - event type constants: `message.received`, `message.status_updated`, `contact.created`,
   `contact.updated`, `lead.created`, `lead.stage_changed`, `deal.won`, `deal.lost`,
   `broadcast.completed`, `followup.enrollment.completed`, `followup.enrollment.stopped`,
-  `webhook.test`.
+  `webchat.visitor.identified`, `webhook.test`.
 
 Receivers must drop event ids they have already processed, because deliveries can repeat.
 The golden vector is in [`vectors-v3.json`](vectors-v3.json) under `webhook[]`.
 
 The legacy `x-hub-token` verifier stays available under `Legacy\` for `/api/v1` webhooks.
+
+## 8. Webchat identity token
+
+```
+signIdentity(secret, identity, widgetId?, ttl = 3600, now?, jti?) -> string     (Python: sign_identity)
+```
+
+Tells the website chat widget who the signed-in customer is (trust level `verified`). Sign on the
+website's **server** with the widget's identity secret (`wcs_…`, shown once when the widget is created or
+rotated); the secret never reaches the browser. The page passes the token to
+`Plasgos("boot", { widgetId, identityToken })` or `Plasgos("identify", { token })`.
+
+Token = JWT HS256:
+
+```
+header_json  = {"alg":"HS256","typ":"JWT"}
+payload_json = {"sub", "email"?, "name"?, "phone"?, "wid"?, "iat", "exp", "jti"}   (keys in this order)
+token        = base64url(header_json) + "." + base64url(payload_json) + "." + base64url(hmac_sha256(secret, first two parts))
+```
+
+Rules:
+
+- **JSON** is compact with unescaped slashes, unicode and line terminators (U+2028/U+2029), so tokens
+  are byte-identical in the three SDKs. base64url without padding.
+- **`identity.sub`** — string (an integer is turned into a string), not blank, at most 255 UTF-16 code
+  units. `email`, `name`, `phone` are optional strings; `null` and `""` are left out; any other type is
+  an argument error.
+- **`widgetId`** → claim `wid`: the server then accepts the token only for that widget.
+- **`ttl`** — integer 1–86400 seconds (the server rejects lifetimes over 24 hours). `exp = iat + ttl`,
+  `iat = now` (Unix seconds).
+- **`jti`** — random UUID v4 by default; at most 128 characters. The server accepts a `jti` for one
+  visitor only, so sign a fresh token per page render / sign-in.
+- Invalid input raises the language's argument error (`TypeError`/`RangeError`,
+  `\InvalidArgumentException`, `ValueError`) whose message starts with `Webchat.signIdentity` /
+  `Webchat::signIdentity` / `Webchat.sign_identity`.
+
+Golden vectors: [`vectors-v3.json`](vectors-v3.json) `webchat_identity[]` (expected header/payload JSON
+and token) and `webchat_identity_invalid[]`. They were cross-checked against the server verifier
+(api-crm `tests/webchat_identity.integration.test.js`).

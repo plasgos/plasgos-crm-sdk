@@ -1,5 +1,5 @@
 {
-  "_comment": "Golden vectors for API v3 (docs/SDK_SPEC.md §2 and §7). request: signature = \"v1=\" + hex(hmac_sha256(secret_key, timestamp \\n METHOD \\n request_target \\n hex(sha256(body)))). webhook: \"v1=\" + hex(hmac_sha256(secret, id . timestamp . body)). Shared by the Node/PHP/Python test suites.",
+  "_comment": "Golden vectors for API v3 (docs/SDK_SPEC.md §2 and §7). request: signature = \"v1=\" + hex(hmac_sha256(secret_key, timestamp \\n METHOD \\n request_target \\n hex(sha256(body)))). webhook: \"v1=\" + hex(hmac_sha256(secret, id . timestamp . body)). Shared by the Node/PHP/Python test suites. webchat_identity: JWT HS256 = base64url(header_json) . base64url(payload_json) . base64url(hmac_sha256(secret, first two parts)); payload keys in order sub, email, name, phone, wid, iat, exp, jti; compact JSON with unescaped slashes and unicode (docs/SDK_SPEC.md §8).",
   "request": [
     {
       "api_key": "test_key",
@@ -39,6 +39,142 @@
       "secret": "whsec_test",
       "body": "{\"id\":\"evt_01JA2ZB8N4C6\",\"type\":\"message.received\",\"api_version\":\"v3\",\"created_at\":\"2026-10-09T03:15:00Z\",\"data\":{\"id\":\"msg_1\"}}",
       "signature": "v1=91d0ce1e39ed8f612161b0620e2a8d7bbfb04b85b72ff22a907c37f0e1c44455"
+    }
+  ],
+  "webchat_identity": [
+    {
+      "name": "minimal",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42"
+      },
+      "options": {
+        "now": 1760500000,
+        "jti": "4b1f3c2e-8a8d-4c35-9f3e-2b6f1e0d9a11"
+      },
+      "header_json": "{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
+      "payload_json": "{\"sub\":\"42\",\"iat\":1760500000,\"exp\":1760503600,\"jti\":\"4b1f3c2e-8a8d-4c35-9f3e-2b6f1e0d9a11\"}",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MiIsImlhdCI6MTc2MDUwMDAwMCwiZXhwIjoxNzYwNTAzNjAwLCJqdGkiOiI0YjFmM2MyZS04YThkLTRjMzUtOWYzZS0yYjZmMWUwZDlhMTEifQ.H31Y9clc4l0TsosJ8bLfK2umM3DzQ-HGyIywqGsaYm8"
+    },
+    {
+      "name": "full",
+      "secret": "wcs_9d2c4f61b0e84a7f93c15e27d8a06b4c",
+      "identity": {
+        "sub": "user-1001",
+        "email": "siti@tokobatik.co.id",
+        "name": "Siti Nurhaliza — Toko Batik/Jakarta",
+        "phone": "+62 812-3456-7890"
+      },
+      "options": {
+        "widget_id": "wgt_a9bfc995c1ea584a5317de4e",
+        "ttl": 900,
+        "now": 1760500000,
+        "jti": "0b9e7c52-6d14-4f8a-a3e1-5c7d2f9b8e40"
+      },
+      "header_json": "{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
+      "payload_json": "{\"sub\":\"user-1001\",\"email\":\"siti@tokobatik.co.id\",\"name\":\"Siti Nurhaliza — Toko Batik/Jakarta\",\"phone\":\"+62 812-3456-7890\",\"wid\":\"wgt_a9bfc995c1ea584a5317de4e\",\"iat\":1760500000,\"exp\":1760500900,\"jti\":\"0b9e7c52-6d14-4f8a-a3e1-5c7d2f9b8e40\"}",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEwMDEiLCJlbWFpbCI6InNpdGlAdG9rb2JhdGlrLmNvLmlkIiwibmFtZSI6IlNpdGkgTnVyaGFsaXphIOKAlCBUb2tvIEJhdGlrL0pha2FydGEiLCJwaG9uZSI6Iis2MiA4MTItMzQ1Ni03ODkwIiwid2lkIjoid2d0X2E5YmZjOTk1YzFlYTU4NGE1MzE3ZGU0ZSIsImlhdCI6MTc2MDUwMDAwMCwiZXhwIjoxNzYwNTAwOTAwLCJqdGkiOiIwYjllN2M1Mi02ZDE0LTRmOGEtYTNlMS01YzdkMmY5YjhlNDAifQ.S7ZJSc3e6BA4lYrOaVIKOulnUI9EetKzcBgmeV2Gcew"
+    },
+    {
+      "name": "numeric sub, empty and null attributes omitted, escaping",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": 1001,
+        "email": null,
+        "name": "Budi \"Bud\" Ñandú 日本 <b>&",
+        "phone": ""
+      },
+      "options": {
+        "ttl": 86400,
+        "now": 1760500000,
+        "jti": "jti-numeric-sub"
+      },
+      "header_json": "{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
+      "payload_json": "{\"sub\":\"1001\",\"name\":\"Budi \\\"Bud\\\" Ñandú 日本 <b>&\",\"iat\":1760500000,\"exp\":1760586400,\"jti\":\"jti-numeric-sub\"}",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDAxIiwibmFtZSI6IkJ1ZGkgXCJCdWRcIiDDkWFuZMO6IOaXpeacrOKAqDxiPiYiLCJpYXQiOjE3NjA1MDAwMDAsImV4cCI6MTc2MDU4NjQwMCwianRpIjoianRpLW51bWVyaWMtc3ViIn0.w8bEEpYoEAJLYgOh4wDjICRYXb3sqfhYtIrt0TZE2to"
+    }
+  ],
+  "webchat_identity_invalid": [
+    {
+      "name": "empty secret",
+      "secret": "",
+      "identity": {
+        "sub": "42"
+      },
+      "options": {}
+    },
+    {
+      "name": "missing sub",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "email": "a@b.co"
+      },
+      "options": {}
+    },
+    {
+      "name": "blank sub",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "   "
+      },
+      "options": {}
+    },
+    {
+      "name": "sub longer than 255",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "options": {}
+    },
+    {
+      "name": "ttl zero",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42"
+      },
+      "options": {
+        "ttl": 0
+      }
+    },
+    {
+      "name": "ttl over 24 hours",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42"
+      },
+      "options": {
+        "ttl": 86401
+      }
+    },
+    {
+      "name": "email not a string",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42",
+        "email": 123
+      },
+      "options": {}
+    },
+    {
+      "name": "empty widget id",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42"
+      },
+      "options": {
+        "widget_id": ""
+      }
+    },
+    {
+      "name": "jti longer than 128",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42"
+      },
+      "options": {
+        "jti": "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
+      }
     }
   ]
 }

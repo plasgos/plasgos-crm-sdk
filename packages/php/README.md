@@ -146,6 +146,22 @@ if ($event['type'] === EventType::MESSAGE_RECEIVED) { /* $event['data'] is a Mes
 
 Deliveries can repeat, so drop `$event['id']` values you have already processed.
 
+## Webchat identity token
+
+Let the website chat widget recognise a signed-in customer. Sign on your server with the widget's identity
+secret (`wcs_…`) — never in the browser — and pass only the token to the page:
+
+```php
+use Plasgos\CrmSdk\Webchat\Webchat;
+
+$identityToken = Webchat::signIdentity(getenv('PLASGOS_WEBCHAT_IDENTITY_SECRET'), [
+    'sub' => (string) $user->id, 'email' => $user->email, 'name' => $user->name,
+]); // named options: widgetId:, ttl: (seconds, default 3600, max 86400)
+// <script>Plasgos("boot", { widgetId: "wgt_…", identityToken: <?= json_encode($identityToken) ?> });</script>
+```
+
+Tokens are single-use per visitor: sign a fresh one per page render / sign-in.
+
 ## Custom transport
 
 ```php

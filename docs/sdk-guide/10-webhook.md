@@ -36,6 +36,7 @@ Aturan: URL wajib `https` dan beralamat publik; maks. 5 langganan per tenant. `u
 | `deal.won`, `deal.lost` | deal dimenangkan / kalah |
 | `broadcast.completed` | broadcast selesai |
 | `followup.enrollment.completed`, `followup.enrollment.stopped` | pendaftaran followup selesai / dihentikan |
+| `webchat.visitor.identified` | pengunjung widget chat website mengisi formulir perkenalan (`contact_provided`) atau terverifikasi (login website / kode email) |
 | `webhook.test` | dari `webhooks.test(id)` |
 
 Bentuk event: `{ id, type, api_version: "v3", created_at, data }` — `data` berbentuk sama dengan

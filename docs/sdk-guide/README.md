@@ -29,13 +29,14 @@ Panduan memakai SDK resmi **2.x** untuk **API Integrasi v3** Plasgos CRM (`/api/
 | 10 | [Webhook](./10-webhook.md) | Langganan event, verifikasi tanda tangan, rotasi secret |
 | 11 | [Resep](./11-resep.md) | Toko online, formulir, sinkron bertahap, pengujian |
 | 12 | [Migrasi dari v1](./12-migrasi-dari-v1.md) | Padanan klien, metode, respons, webhook |
+| 13 | [Webchat — pelanggan login](./13-webchat.md) | Token identitas untuk widget chat website (`Webchat.signIdentity`) |
 
 Referensi teknis:
 
 - [`../../openapi/openapi-v3.json`](../../openapi/openapi-v3.json) — kontrak API v3 (OpenAPI)
 - [`../SDK_SPEC.md`](../SDK_SPEC.md) — kontrak metode, tanda tangan, galat & coba ulang yang sama di 3 SDK
 - [`../../UPGRADING.md`](../../UPGRADING.md) — perubahan 1.x → 2.0 per bahasa
-- [`../vectors-v3.json`](../vectors-v3.json) — vektor uji tanda tangan permintaan & webhook
+- [`../vectors-v3.json`](../vectors-v3.json) — vektor uji tanda tangan permintaan, webhook & token identitas webchat
 
 ---
 

@@ -200,6 +200,23 @@ def plasgos_webhook():
 Verify the **raw** body. Deliveries can repeat, so drop `event["id"]` values you have already
 processed.
 
+## Webchat identity token
+
+Let the website chat widget recognise a signed-in customer. Sign on your server with the widget's identity
+secret (`wcs_…`) — never in the browser — and pass only the token to the page:
+
+```python
+from plasgos_crm import Webchat
+
+identity_token = Webchat.sign_identity(
+    os.environ["PLASGOS_WEBCHAT_IDENTITY_SECRET"],
+    {"sub": str(user.id), "email": user.email, "name": user.name},
+)  # keyword options: widget_id=, ttl= (seconds, default 3600, max 86400)
+# template: Plasgos("boot", { widgetId: "wgt_…", identityToken: {{ identity_token|tojson }} })
+```
+
+Tokens are single-use per visitor: sign a fresh one per page render / sign-in.
+
 ## Development
 
 ```bash

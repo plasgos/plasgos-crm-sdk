@@ -16,6 +16,7 @@ export {
 export { signV3, signatureHeadersV3, stringToSign, type V3SignatureHeaders } from "./v3/signature.js";
 export { buildQuery, type KeyOrOptions, type Method, type Query, type RequestLogEvent, type RequestOptions } from "./v3/api-client.js";
 export { Webhook, WebhookEventType, type WebhookEventV3, type WebhookEventTypeName } from "./v3/webhook.js";
+export { Webchat, type SignIdentityOptions, type WebchatIdentity } from "./v3/webchat.js";
 export { SDK_VERSION } from "./version.js";
 
 // ——— Legacy /api/v1 (deprecated, removed in 3.0) ———

@@ -19,7 +19,7 @@ import into Notion.
 ## What the SDKs cover
 
 > **SDK 2.0 = API Integrasi v3** (`/api/v3`): omnichannel messages, contacts, leads, broadcasts,
-> followups, HMAC-signed webhooks. PHP, Node and Python 2.0 are implemented
+> followups, HMAC-signed webhooks, and webchat identity tokens for the website chat widget. PHP, Node and Python 2.0 are implemented
 > ([UPGRADING.md](UPGRADING.md)) against one contract ([docs/SDK_SPEC.md](docs/SDK_SPEC.md)). The
 > section below describes the **legacy v1** surface (`LegacyClient` in 2.x, `Client` in 1.x).
 
