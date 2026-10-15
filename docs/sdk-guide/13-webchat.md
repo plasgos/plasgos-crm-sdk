@@ -89,13 +89,15 @@ perangkat bersama, agar pelanggan berikutnya tidak melihat chat sebelumnya.
 
 Halaman chat penuh `https://widget.plasgoschat.com/m/wgt_…` (dashboard CRM → Webchat → Pemasangan → **Tautan chat
 langsung**) bisa dibuka di WebView. Untuk pengguna yang login di aplikasi, server aplikasi membuat token dengan fungsi
-yang sama lalu aplikasi membuka tautan dengan token di FRAGMEN URL:
+yang sama, lalu aplikasi menjalankan JavaScript ini di WebView setelah halaman dimuat:
 
-```
-https://widget.plasgoschat.com/m/wgt_…#identity_token=<token>
+```js
+Plasgos("identify", { token: "<token>" });
 ```
 
-Fragmen (`#…`) tidak dikirim ke server mana pun; widget membacanya sekali lalu menghapusnya dari alamat.
+(Android `evaluateJavascript`, iOS `evaluateJavaScript`, React Native `injectJavaScript`, Flutter `runJavaScript`.)
+Jangan menaruh token di tautan: tautan berisi token bisa dibuat orang lain untuk memasukkan pelanggan ke akun yang
+salah, karena itu widget mengabaikannya.
 
 ## Bila token ditolak
 
