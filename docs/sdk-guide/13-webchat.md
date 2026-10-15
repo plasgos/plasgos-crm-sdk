@@ -85,6 +85,18 @@ Wrapper framework: isi prop `identityToken` (`<PlasgosWebchat widgetId="wgt_…"
 **Saat logout** panggil `Plasgos("shutdown")` (wrapper: kosongkan `identityToken`), terutama di
 perangkat bersama, agar pelanggan berikutnya tidak melihat chat sebelumnya.
 
+## Aplikasi mobile (WebView)
+
+Halaman chat penuh `https://widget.plasgoschat.com/m/wgt_…` (dashboard CRM → Webchat → Pemasangan → **Tautan chat
+langsung**) bisa dibuka di WebView. Untuk pengguna yang login di aplikasi, server aplikasi membuat token dengan fungsi
+yang sama lalu aplikasi membuka tautan dengan token di FRAGMEN URL:
+
+```
+https://widget.plasgoschat.com/m/wgt_…#identity_token=<token>
+```
+
+Fragmen (`#…`) tidak dikirim ke server mana pun; widget membacanya sekali lalu menghapusnya dari alamat.
+
 ## Bila token ditolak
 
 Widget memancarkan event `error` `{ code: "identity_invalid", reason }`. Pengunjung tetap bisa chat
