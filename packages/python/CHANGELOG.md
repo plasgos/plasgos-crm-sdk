@@ -6,7 +6,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [2.0.0] - Unreleased
 
 ### Added (webchat)
-- `Webchat.sign_identity(secret, identity, *, widget_id=None, ttl=3600)`: identity token (JWT HS256) for the website chat widget — the signed-in customer becomes a `verified` visitor. Claims in a fixed order so tokens are byte-identical across the three SDKs; golden vectors `webchat_identity[]` in `docs/vectors-v3.json`, cross-checked against the server verifier. `ttl` 1–86400 s (default 3600), random UUID `jti` (single use per visitor), optional `wid` binding.
+- `Webchat.sign_identity(secret, identity, *, widget_id=None, ttl=3600)`: identity token (JWT HS256) for the website chat widget — the signed-in customer becomes a `verified` visitor. Claims in a fixed order so tokens are byte-identical across the three SDKs; golden vectors `webchat_identity[]` in `docs/vectors-v3.json`, cross-checked against the server verifier. `ttl` 1–86400 s (default 3600), random UUID `jti` (single use per visitor), optional `wid` binding. Optional `email_verified` (only `true`, only with `email`): the server links the visitor to an existing CRM contact by email only when the website itself verified the address.
 
 ### API contract additions (webchat)
 - Channel `webchat` (website chat widget) in `ChannelName`: contact references `{channel: "webchat", external_id: "vis_…"}` (visitor id, or `uid:<widget_id>:<sub>` for visitors signed in on the website) — scoped to the widget, so pass `endpoint_id` (`wgt_…`) when sending. Treat channel values you don't know as "other", never fail on them.

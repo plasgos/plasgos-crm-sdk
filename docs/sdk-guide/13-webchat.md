@@ -51,7 +51,8 @@ identity_token = Webchat.sign_identity(
 | Isian | Wajib | Keterangan |
 |---|---|---|
 | `sub` | ya | id pelanggan di sistem Anda (teks; angka diubah ke teks), maks. 255 karakter. Jangan pakai email sebagai `sub` bila pelanggan bisa mengganti emailnya |
-| `email`, `name`, `phone` | tidak | atribut terverifikasi. Mengisi field kontak CRM yang masih kosong (nilai yang sudah ada tidak ditimpa). `null`/kosong diabaikan |
+| `email`, `name`, `phone` | tidak | atribut profil. Mengisi field kontak CRM yang masih kosong (nilai yang sudah ada tidak ditimpa). `null`/kosong diabaikan |
+| `email_verified` | tidak | `true` HANYA bila website Anda sudah memverifikasi pelanggan memiliki `email` itu (tautan konfirmasi, login Google/OAuth). Hanya dengan ini email dipakai untuk menyambungkan pengunjung ke kontak CRM lama ber-email sama (riwayat chat & data pelanggan). Tanpanya, email hanya pengisi profil — siapa pun bisa mendaftar dengan email orang lain. `false`/kosong diabaikan |
 
 Opsi (Node `{ widgetId, ttl }`, PHP argumen bernama `widgetId:`, `ttl:`, Python `widget_id=`, `ttl=`):
 

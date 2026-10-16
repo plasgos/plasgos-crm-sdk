@@ -6,8 +6,8 @@ secret is rotated) and hand only the token to the page::
     token = Webchat.sign_identity(os.environ["PLASGOS_WEBCHAT_IDENTITY_SECRET"], {"sub": str(user.id), "email": user.email})
     # <script>Plasgos("boot", { widgetId: "wgt_…", identityToken: {{ token|tojson }} });</script>
 
-The secret must never reach the browser. JWT HS256 with claims ``sub``, ``email?``, ``name?``, ``phone?``, ``wid?``,
-``iat``, ``exp``, ``jti``. Each token is single-use per visitor, so sign a fresh one per page render / sign-in.
+The secret must never reach the browser. JWT HS256 with claims ``sub``, ``email?``, ``email_verified?``, ``name?``,
+``phone?``, ``wid?``, ``iat``, ``exp``, ``jti``. Each token is single-use per visitor, so sign a fresh one per page render / sign-in.
 """
 
 from __future__ import annotations
@@ -57,7 +57,9 @@ class Webchat:
 
         :param identity: ``sub`` (str | int, required) = stable id of the customer in your system (≤ 255
             characters); ``email``, ``name``, ``phone`` (str | None) fill empty fields of the CRM contact
-            (``None``/``""`` are left out).
+            (``None``/``""`` are left out). ``email_verified`` (bool | None) = ``True`` ONLY when your site verified
+            the customer owns ``email``; only then is the email used to link the visitor to an existing CRM contact
+            (left out when not ``True``).
         :param widget_id: binds the token to one widget (``wgt_…``).
         :param ttl: lifetime in seconds, 1–86400 (the server rejects longer).
         :param now: Unix seconds; for tests.
@@ -83,6 +85,9 @@ class Webchat:
         iat = int(time.time()) if now is None else now
 
         # Fixed key order: tokens are byte-identical across the Node, PHP and Python SDKs (docs/vectors-v3.json).
+        verified = identity.get("email_verified")
+        if verified is not None and not isinstance(verified, bool):
+            raise ValueError("Webchat.sign_identity: email_verified must be a boolean")
         payload: dict[str, Any] = {"sub": sub}
         for key in ("email", "name", "phone"):
             value = identity.get(key)
@@ -91,6 +96,8 @@ class Webchat:
             if not isinstance(value, str):
                 raise ValueError(f"Webchat.sign_identity: {key} must be a string")
             payload[key] = value
+            if key == "email" and verified is True:
+                payload["email_verified"] = True
         if widget_id is not None:
             payload["wid"] = widget_id
         payload["iat"] = iat

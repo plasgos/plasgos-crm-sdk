@@ -356,7 +356,7 @@ Token = JWT HS256:
 
 ```
 header_json  = {"alg":"HS256","typ":"JWT"}
-payload_json = {"sub", "email"?, "name"?, "phone"?, "wid"?, "iat", "exp", "jti"}   (keys in this order)
+payload_json = {"sub", "email"?, "email_verified"?, "name"?, "phone"?, "wid"?, "iat", "exp", "jti"}   (keys in this order)
 token        = base64url(header_json) + "." + base64url(payload_json) + "." + base64url(hmac_sha256(secret, first two parts))
 ```
 
@@ -367,6 +367,12 @@ Rules:
 - **`identity.sub`** — string (an integer is turned into a string), not blank, at most 255 UTF-16 code
   units. `email`, `name`, `phone` are optional strings; `null` and `""` are left out; any other type is
   an argument error.
+- **`identity.email_verified`** — optional boolean. Claim `email_verified: true` is written (right after
+  `email`) ONLY when it is `true` AND `email` is present; `false`/`null`/absent leave it out, so tokens without it
+  are unchanged. Any other type is an argument error. The server links the visitor to an EXISTING CRM contact by
+  email only when this claim is `true`: set it only when the website itself verified the customer owns the
+  address (confirmation link, OAuth). Otherwise the email just fills empty contact fields — anyone could sign up
+  with someone else's address.
 - **`widgetId`** → claim `wid`: the server then accepts the token only for that widget.
 - **`ttl`** — integer 1–86400 seconds (the server rejects lifetimes over 24 hours). `exp = iat + ttl`,
   `iat = now` (Unix seconds).

@@ -19,8 +19,8 @@ use Plasgos\CrmSdk\Http\ApiClient;
  * // <script>Plasgos("boot", { widgetId: "wgt_…", identityToken: <?= json_encode($token) ?> });</script>
  * ```
  *
- * The secret must never reach the browser. JWT HS256 with claims `sub`, `email?`, `name?`, `phone?`, `wid?`, `iat`,
- * `exp`, `jti`. Each token is single-use per visitor, so sign a fresh one per page render / sign-in.
+ * The secret must never reach the browser. JWT HS256 with claims `sub`, `email?`, `email_verified?`, `name?`, `phone?`,
+ * `wid?`, `iat`, `exp`, `jti`. Each token is single-use per visitor, so sign a fresh one per page render / sign-in.
  */
 final class Webchat
 {
@@ -35,6 +35,8 @@ final class Webchat
      * @param array<string, mixed> $identity `sub` (string|int, required) = stable id of the customer in your system
      *        (≤ 255 characters); `email`, `name`, `phone` (string|null, optional) fill empty fields of the CRM contact
      *        (`null`/`''` are left out). Checked at runtime — values often come from a database row.
+     *        `email_verified` (bool, optional) = `true` ONLY when your site verified the customer owns `email`; only
+     *        then is the email used to link the visitor to an existing CRM contact (omitted when not `true`).
      * @param string|null $widgetId binds the token to one widget (`wgt_…`)
      * @param int $ttl lifetime in seconds, 1–86400 (the server rejects longer)
      * @param int|null $now Unix seconds; for tests
@@ -71,6 +73,10 @@ final class Webchat
         $iat = $now ?? time();
 
         // Fixed key order: tokens are byte-identical across the Node, PHP and Python SDKs (docs/vectors-v3.json).
+        $verified = $identity['email_verified'] ?? null;
+        if ($verified !== null && ! is_bool($verified)) {
+            throw new \InvalidArgumentException('Webchat::signIdentity: email_verified must be a boolean');
+        }
         $payload = ['sub' => $sub];
         foreach (['email', 'name', 'phone'] as $key) {
             $value = $identity[$key] ?? null;
@@ -81,6 +87,9 @@ final class Webchat
                 throw new \InvalidArgumentException("Webchat::signIdentity: {$key} must be a string");
             }
             $payload[$key] = $value;
+            if ($key === 'email' && $verified === true) {
+                $payload['email_verified'] = true;
+            }
         }
         if ($widgetId !== null) {
             $payload['wid'] = $widgetId;

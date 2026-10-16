@@ -1,5 +1,5 @@
 {
-  "_comment": "Golden vectors for API v3 (docs/SDK_SPEC.md §2 and §7). request: signature = \"v1=\" + hex(hmac_sha256(secret_key, timestamp \\n METHOD \\n request_target \\n hex(sha256(body)))). webhook: \"v1=\" + hex(hmac_sha256(secret, id . timestamp . body)). Shared by the Node/PHP/Python test suites. webchat_identity: JWT HS256 = base64url(header_json) . base64url(payload_json) . base64url(hmac_sha256(secret, first two parts)); payload keys in order sub, email, name, phone, wid, iat, exp, jti; compact JSON with unescaped slashes and unicode (docs/SDK_SPEC.md §8).",
+  "_comment": "Golden vectors for API v3 (docs/SDK_SPEC.md §2 and §7). request: signature = \"v1=\" + hex(hmac_sha256(secret_key, timestamp \\n METHOD \\n request_target \\n hex(sha256(body)))). webhook: \"v1=\" + hex(hmac_sha256(secret, id . timestamp . body)). Shared by the Node/PHP/Python test suites. webchat_identity: JWT HS256 = base64url(header_json) . base64url(payload_json) . base64url(hmac_sha256(secret, first two parts)); payload keys in order sub, email, email_verified (only true, only with email), name, phone, wid, iat, exp, jti; compact JSON with unescaped slashes and unicode (docs/SDK_SPEC.md §8).",
   "request": [
     {
       "api_key": "test_key",
@@ -92,6 +92,25 @@
       "header_json": "{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
       "payload_json": "{\"sub\":\"1001\",\"name\":\"Budi \\\"Bud\\\" Ñandú 日本 <b>&\",\"iat\":1760500000,\"exp\":1760586400,\"jti\":\"jti-numeric-sub\"}",
       "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMDAxIiwibmFtZSI6IkJ1ZGkgXCJCdWRcIiDDkWFuZMO6IOaXpeacrOKAqDxiPiYiLCJpYXQiOjE3NjA1MDAwMDAsImV4cCI6MTc2MDU4NjQwMCwianRpIjoianRpLW51bWVyaWMtc3ViIn0.w8bEEpYoEAJLYgOh4wDjICRYXb3sqfhYtIrt0TZE2to"
+    },
+    {
+      "name": "email verified by the website (email_verified only when true and email present)",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "user-77",
+        "email": "rina@tokobatik.co.id",
+        "email_verified": true,
+        "name": "Rina"
+      },
+      "options": {
+        "widget_id": "wgt_a9bfc995c1ea584a5317de4e",
+        "ttl": 600,
+        "now": 1760500000,
+        "jti": "jti-email-verified"
+      },
+      "header_json": "{\"alg\":\"HS256\",\"typ\":\"JWT\"}",
+      "payload_json": "{\"sub\":\"user-77\",\"email\":\"rina@tokobatik.co.id\",\"email_verified\":true,\"name\":\"Rina\",\"wid\":\"wgt_a9bfc995c1ea584a5317de4e\",\"iat\":1760500000,\"exp\":1760500600,\"jti\":\"jti-email-verified\"}",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTc3IiwiZW1haWwiOiJyaW5hQHRva29iYXRpay5jby5pZCIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiUmluYSIsIndpZCI6IndndF9hOWJmYzk5NWMxZWE1ODRhNTMxN2RlNGUiLCJpYXQiOjE3NjA1MDAwMDAsImV4cCI6MTc2MDUwMDYwMCwianRpIjoianRpLWVtYWlsLXZlcmlmaWVkIn0.pkNRVcw4R5d5HeXARy2XHp0HhczO-xjsohQTJdEFE5o"
     }
   ],
   "webchat_identity_invalid": [
@@ -175,6 +194,16 @@
       "options": {
         "jti": "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj"
       }
+    },
+    {
+      "name": "email_verified not a boolean",
+      "secret": "wcs_test_secret",
+      "identity": {
+        "sub": "42",
+        "email": "a@b.co",
+        "email_verified": "yes"
+      },
+      "options": {}
     }
   ]
 }

@@ -8,14 +8,20 @@ import { createHmac, randomUUID } from "node:crypto";
  *
  *   Plasgos("boot", { widgetId: "wgt_…", identityToken: Webchat.signIdentity(secret, { sub: String(user.id), email: user.email }) })
  *
- * The secret must never reach the browser. JWT HS256 with claims `sub`, `email?`, `name?`, `phone?`, `wid?`, `iat`,
- * `exp`, `jti`. Each token is single-use per visitor, so sign a fresh one per page render / sign-in.
+ * The secret must never reach the browser. JWT HS256 with claims `sub`, `email?`, `email_verified?`, `name?`, `phone?`,
+ * `wid?`, `iat`, `exp`, `jti`. Each token is single-use per visitor, so sign a fresh one per page render / sign-in.
  */
 export interface WebchatIdentity {
   /** Stable id of the customer in your system (≤ 255 characters). */
   sub: string | number;
-  /** Verified attributes; they fill empty fields of the CRM contact. `null`/`""` are left out. */
+  /** Profile attributes; they fill empty fields of the CRM contact. `null`/`""` are left out. */
   email?: string | null;
+  /**
+   * `true` ONLY when YOUR site has verified the customer owns `email` (confirmation link, OAuth provider). Only then
+   * is the email used to link the visitor to an existing CRM contact with that email; otherwise anyone who signs up
+   * with someone else's address could read that person's chat history. Omitted when not `true`.
+   */
+  email_verified?: boolean | null;
   name?: string | null;
   phone?: string | null;
 }
@@ -69,10 +75,16 @@ export const Webchat = {
     const iat = options.now ?? Math.floor(Date.now() / 1000);
 
     // Fixed key order: tokens are byte-identical across the Node, PHP and Python SDKs (docs/vectors-v3.json).
-    const payload: Record<string, string | number> = { sub };
+    const payload: Record<string, string | number | boolean> = { sub };
+    const verified = identity.email_verified;
+    if (verified !== undefined && verified !== null && typeof verified !== "boolean") {
+      throw new TypeError("Webchat.signIdentity: email_verified must be a boolean");
+    }
     for (const key of ["email", "name", "phone"] as const) {
       const value = optionalText(identity, key);
-      if (value !== undefined) payload[key] = value;
+      if (value === undefined) continue;
+      payload[key] = value;
+      if (key === "email" && verified === true) payload.email_verified = true;
     }
     if (options.widgetId !== undefined) payload.wid = options.widgetId;
     payload.iat = iat;
