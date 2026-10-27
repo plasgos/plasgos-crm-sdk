@@ -10,9 +10,9 @@ Bump the version wherever it appears:
 
 | Package | Files to bump |
 |---|---|
-| Node | `packages/node/package.json` (`version`) and the `SDK_VERSION` const in `src/version.ts` |
-| PHP | `packages/php/src/Http/Transport.php` (`VERSION`) — Packagist reads the git tag, not `composer.json` |
-| Python | `packages/python/pyproject.toml` (`version`) and `__version__` in `src/plasgos_crm/_version.py` |
+| Node | `packages/node/package.json` (`version`), `package-lock.json` (root `version` and `packages[""]`) and the `SDK_VERSION` const in `src/version.ts` |
+| PHP | `packages/php/src/Http/Transport.php` (`VERSION`) and the User-Agent assertion in `tests/ClientTest.php` — Packagist reads the git tag, not `composer.json` |
+| Python | `packages/python/pyproject.toml` (`version`), `__version__` in `src/plasgos_crm/_version.py` and the User-Agent assertion in `tests/test_v3_client.py` |
 
 ## Tags
 

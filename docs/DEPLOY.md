@@ -161,6 +161,7 @@ Naikkan versi di dua tempat — workflow menolak bila tag, `package.json`, dan `
 | Berkas | Isi |
 |---|---|
 | `packages/node/package.json` | `"version": "X.Y.Z"` |
+| `packages/node/package-lock.json` | `"version": "X.Y.Z"` di akar dan di `packages[""]` |
 | `packages/node/src/version.ts` | `export const SDK_VERSION = "X.Y.Z";` |
 | `packages/node/CHANGELOG.md` | entri `## [X.Y.Z] - YYYY-MM-DD` |
 
@@ -186,6 +187,7 @@ sana).
 | Berkas | Isi |
 |---|---|
 | `packages/php/src/Http/Transport.php` | `public const VERSION = 'X.Y.Z';` |
+| `packages/php/tests/ClientTest.php` | User-Agent `plasgos-crm-sdk-php/X\.Y\.Z` (test mengunci versi; lupa = job verify merah) |
 | `packages/php/CHANGELOG.md` | entri `## [X.Y.Z] - YYYY-MM-DD` |
 
 ```bash
@@ -207,6 +209,7 @@ Workflow:
 |---|---|
 | `packages/python/pyproject.toml` | `version = "X.Y.Z"` |
 | `packages/python/src/plasgos_crm/_version.py` | `__version__ = "X.Y.Z"` |
+| `packages/python/tests/test_v3_client.py` | User-Agent `plasgos-crm-sdk-python/X.Y.Z` (test mengunci versi; lupa = job build merah) |
 | `packages/python/CHANGELOG.md` | entri `## [X.Y.Z] - YYYY-MM-DD` |
 
 ```bash
