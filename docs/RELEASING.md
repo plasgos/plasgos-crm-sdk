@@ -1,5 +1,8 @@
 # Releasing
 
+Step-by-step runbook in Indonesian (one-time registry setup, per-release commands, troubleshooting):
+**[DEPLOY.md](DEPLOY.md)**.
+
 Each package versions and publishes independently. Keep the three at the same
 `MAJOR.MINOR` when they track the same API contract; patch releases can diverge.
 
