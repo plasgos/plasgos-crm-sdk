@@ -3,7 +3,7 @@
 All notable changes to this package are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] - 2026-10-27
+## [2.1.0] - Unreleased
 
 ### Added (webchat)
 - `Webchat.signIdentity(secret, identity, { widgetId?, ttl? })`: identity token (JWT HS256) for the website chat widget — the signed-in customer becomes a `verified` visitor. Claims in a fixed order so tokens are byte-identical across the three SDKs; golden vectors `webchat_identity[]` in `docs/vectors-v3.json`, cross-checked against the server verifier. `ttl` 1–86400 s (default 3600), random UUID `jti` (single use per visitor), optional `wid` binding. Optional `email_verified` (only `true`, only with `email`): the server links the visitor to an existing CRM contact by email only when the website itself verified the address.
@@ -11,6 +11,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ### API contract additions (webchat)
 - Channel `webchat` (website chat widget) in `ChannelName`: contact references `{channel: "webchat", external_id: "vis_…"}` (visitor id, or `uid:<widget_id>:<sub>` for visitors signed in on the website) — scoped to the widget, so pass `endpoint_id` (`wgt_…`) when sending. Treat channel values you don't know as "other", never fail on them.
 - Webhook event `webchat.visitor.identified` (`WebhookEventType.WEBCHAT_VISITOR_IDENTIFIED`): a website visitor filled the pre-chat form (`trust_level: contact_provided`) or proved who they are via website sign-in / email code (`verified`). Data `WebchatVisitorIdentified` carries ids, trust level, method and the email **domain** only — fetch the contact for personal data.
+
+## [2.0.0] - 2026-10-27
 
 ### API contract 3.0.0-rc.2
 - One `contact` object names "who" in `messages.send`, `leads.create` and `followups.enroll`: `{id}` | `{phone_number, …profile}` | `{channel, external_id}` | `{email}` (replaces `recipient` + `identity` + `create_contact`, and `contact_id` | `contact`). Profile fields only fill a NEW contact. `send-options` / `lookup` queries use the same keys (`send-options` also accepts `email`).
