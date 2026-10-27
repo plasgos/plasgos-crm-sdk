@@ -3,7 +3,7 @@
 All notable changes to this package are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.1.0] - Unreleased
+## [2.1.0] - 2026-10-27
 
 ### Added (webchat)
 - `Webchat.signIdentity(secret, identity, { widgetId?, ttl? })`: identity token (JWT HS256) for the website chat widget — the signed-in customer becomes a `verified` visitor. Claims in a fixed order so tokens are byte-identical across the three SDKs; golden vectors `webchat_identity[]` in `docs/vectors-v3.json`, cross-checked against the server verifier. `ttl` 1–86400 s (default 3600), random UUID `jti` (single use per visitor), optional `wid` binding. Optional `email_verified` (only `true`, only with `email`): the server links the visitor to an existing CRM contact by email only when the website itself verified the address.

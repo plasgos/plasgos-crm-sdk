@@ -120,7 +120,7 @@ def test_signs_method_path_and_exact_body_bytes() -> None:
     assert r.headers["Plasgos-Api-Key"] == "ak_test"
     assert r.headers["Idempotency-Key"] == "key-1"
     assert r.headers["Content-Type"] == "application/json; charset=utf-8"
-    assert r.headers["User-Agent"].startswith("plasgos-crm-sdk-python/2.0.0 python/")
+    assert r.headers["User-Agent"].startswith("plasgos-crm-sdk-python/2.1.0 python/")
 
 
 def test_signs_query_as_sent() -> None:

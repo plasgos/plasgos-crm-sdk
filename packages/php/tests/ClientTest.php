@@ -101,7 +101,7 @@ final class ClientTest extends TestCase
             json_decode($body, true)['content'],
         );
         self::assertStringContainsString('{{full_name}}', $body);
-        self::assertMatchesRegularExpression('#^plasgos-crm-sdk-php/2\.0\.0 php/#', $req->getHeaderLine('User-Agent'));
+        self::assertMatchesRegularExpression('#^plasgos-crm-sdk-php/2\.1\.0 php/#', $req->getHeaderLine('User-Agent'));
     }
 
     public function testQueryIsSignedAsSentAndNullsDropped(): void

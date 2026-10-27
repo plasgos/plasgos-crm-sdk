@@ -19,7 +19,7 @@ use Psr\Http\Message\StreamFactoryInterface;
  */
 final class Transport
 {
-    public const VERSION = '2.0.0';
+    public const VERSION = '2.1.0';
 
     /**
      * @return array{client: ClientInterface, requestFactory: RequestFactoryInterface, streamFactory: StreamFactoryInterface, baseUrl: string, userAgent: string}
