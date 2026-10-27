@@ -71,6 +71,7 @@ openapi/openapi.yaml         API contract (OpenAPI 3.1)
 docs/sdk-guide/              full usage guide, API v3 (12 pages, Notion-ready; v1 guide in legacy-v1/)
 docs/SDK_SPEC.md             shared SDK contract
 docs/vectors.json            golden signature vectors
+docs/DEPLOY.md               step-by-step deploy to npm · Packagist · PyPI (Bahasa Indonesia)
 docs/RELEASING.md            per-registry publish steps
 docs/PUBLISHING_NPM.md       npm registration + publish walkthrough
 packages/node                plasgos-crm-sdk

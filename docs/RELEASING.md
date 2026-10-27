@@ -1,5 +1,8 @@
 # Releasing
 
+Step-by-step runbook in Indonesian (one-time registry setup, per-release commands, troubleshooting):
+**[DEPLOY.md](DEPLOY.md)**.
+
 Each package versions and publishes independently. Keep the three at the same
 `MAJOR.MINOR` when they track the same API contract; patch releases can diverge.
 
@@ -39,8 +42,8 @@ git tag node-v1.2.0 && git push && git push origin node-v1.2.0
 
 CI: [`.github/workflows/release-node.yml`](../.github/workflows/release-node.yml)
 fires on `node-v*` tags — typecheck + test + build, verifies the tag matches
-`package.json`, then `npm publish --provenance --access public` (needs the
-`NPM_TOKEN` repo secret, or npm Trusted Publishing). It also checks the tag against `SDK_VERSION`
+`package.json`, then `npm publish --access public` through npm Trusted Publishing (no token; provenance
+is attached automatically). It also checks the tag against `SDK_VERSION`
 and the generated types against `openapi-v3.json`.
 
 ## PHP → Packagist

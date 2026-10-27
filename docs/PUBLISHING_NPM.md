@@ -99,15 +99,19 @@ npm install plasgos-crm-sdk     # in a scratch dir, confirm it resolves + types 
 
 Workflow: [`.github/workflows/release-node.yml`](../.github/workflows/release-node.yml).
 It triggers on tags matching `node-v*`, runs typecheck + tests + build, checks
-the tag matches `package.json`, then `npm publish --provenance --access public`.
+the tag matches `package.json`, then `npm publish --access public` with npm
+Trusted Publishing (OIDC). No token is stored: npm revoked all classic tokens
+(including "Automation") on 2025-12-09, and write-enabled granular tokens expire
+after at most 90 days.
 
 Set it up once:
 
-1. Create an **Automation** access token:
-   npm → Account → Access Tokens → Generate New Token → *Automation*
-   (bypasses the interactive 2FA prompt in CI).
-2. GitHub repo → Settings → Secrets and variables → Actions → New repository
-   secret → name `NPM_TOKEN`, value = the token.
+1. npmjs.com → package `plasgos-crm-sdk` → **Settings** → **Trusted Publisher**
+   → GitHub Actions: organization `plasgos`, repository `plasgos-crm-sdk`,
+   workflow filename `release-node.yml`, environment empty. A new trusted
+   publisher must complete its first publish within 2 days or it expires.
+2. Trusted publishing needs Node ≥ 22.14 and npm CLI ≥ 11.5.1; the workflow
+   runs Node 24 and upgrades npm before publishing.
 3. Release:
    ```bash
    cd packages/node
@@ -119,12 +123,8 @@ Set it up once:
    The workflow publishes and attaches a provenance statement (the
    "Built and signed on GitHub Actions" badge on the npm page).
 
-#### Even better: Trusted Publishing (no token)
-
-npm now supports OIDC trusted publishing. On the npm package settings page add a
-trusted publisher: repo `plasgos/plasgos-crm-sdk`, workflow
-`.github/workflows/release-node.yml`. Then delete the `NODE_AUTH_TOKEN` env line
-from the workflow — `id-token: write` is already granted.
+After the first trusted publish succeeds, the package settings can switch
+**Publishing access** to "Require two-factor authentication and disallow tokens".
 
 ---
 
@@ -152,10 +152,10 @@ import { verifyWebhook } from "plasgos-crm-sdk/webhooks";
 |---|---|
 | `402 Payment Required` on publish | first publish of an unscoped package while logged into an org context — pass `--access public` (already in `publishConfig`) |
 | `403 Forbidden` / name taken | `npm view plasgos-crm-sdk` — choose another name or go scoped |
-| `E402` / `EOTP` | 2FA OTP required — run `npm publish --otp=123456` or use an Automation token in CI |
+| `E402` / `EOTP` | 2FA OTP required — run `npm publish --otp=123456` locally; CI uses Trusted Publishing |
 | tarball missing `dist/` | run `npm run build` first; on real publish `prepublishOnly` handles it |
 | `dist/` contains stale files | `rm -rf dist && npm run build` (tsup `clean: true` normally handles it) |
-| CI publish: `ENEEDAUTH` | `NPM_TOKEN` secret missing/expired, or `registry-url` not set on `setup-node` |
+| CI publish: `ENEEDAUTH` / `404` | trusted publisher missing or expired on npmjs.com (organization, repository, workflow filename must match exactly), npm CLI older than 11.5.1, or `registry-url` not set on `setup-node` |
 | version already published | npm forbids republishing a version — bump with `npm version` |
 
 ## 5. Deprecate / unpublish

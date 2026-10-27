@@ -1,16 +1,16 @@
 name: release-node
 
 # Publishes packages/node to npm when a tag like `node-v1.2.3` is pushed.
-# Requirements:
-#   - repo secret NPM_TOKEN  (npm "Automation" access token), OR
-#   - npm Trusted Publishing configured for this repo+workflow (then drop NODE_AUTH_TOKEN)
+# Requirements: npm Trusted Publishing for this repo + workflow (npmjs.com → package → Settings →
+# Trusted Publisher: plasgos / plasgos-crm-sdk / release-node.yml). No token: npm classic tokens were
+# revoked on 2025-12-09. Trusted publishing needs Node ≥ 22.14 and npm CLI ≥ 11.5.1.
 on:
   push:
     tags: ["node-v*"]
 
 permissions:
   contents: read
-  id-token: write # for --provenance / trusted publishing
+  id-token: write # trusted publishing (provenance is attached automatically)
 
 defaults:
   run:
@@ -23,10 +23,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
           cache: npm
           cache-dependency-path: packages/node/package-lock.json
+
+      - name: npm CLI for trusted publishing (≥ 11.5.1)
+        run: npm install -g npm@latest && npm --version
 
       - run: npm ci
       - run: npm run typecheck
@@ -48,6 +51,4 @@ jobs:
             exit 1
           fi
 
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public
